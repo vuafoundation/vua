@@ -1,0 +1,6 @@
+{
+  "name": "Vortex MCP Server - Foundation Execution Governance",
+  "description": "Normative Vortex MCP Server implementation with RFC 8785 JCS canonicalization, Ed25519 cryptographic identity, GOS3 onboarding, bounded sandbox, independent verifier, and adversarial conformance suite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
