@@ -9,7 +9,9 @@ import {
   FileCheck,
   Server,
   Cpu,
-  Layers
+  Layers,
+  FolderGit2,
+  Sparkles
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -28,6 +30,7 @@ interface HeaderProps {
   onRotateKey: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  onOpenMascot?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRotateKey,
   activeTab,
   setActiveTab,
+  onOpenMascot,
 }) => {
   const [copiedKey, setCopiedKey] = useState(false);
 
@@ -47,41 +51,71 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const navItems = [
-    { id: 'vua-adapters', label: 'VUA Universal Adapters', icon: Layers },
+    { id: 'vua-adapters', label: 'Adaptadores VUA', icon: Layers },
+    { id: 'github-manager', label: 'GitHub & Projetos', icon: FolderGit2 },
     { id: 'workbench', label: 'MCP Workbench', icon: Terminal },
     { id: 'llm-gateway', label: 'Multi-LLM Gateway', icon: Cpu },
     { id: 'verifier', label: 'Independent Verifier', icon: Shield },
     { id: 'e2e', label: 'Foundation 10 E2E', icon: CheckCircle2 },
     { id: 'adversarial', label: 'Adversarial Suite', icon: FileCheck },
     { id: 'gos3', label: 'GOS3 & Sandbox', icon: Server },
-    { id: 'ci-benchmark', label: 'CI Evidence & Benchmark', icon: RefreshCw },
+    { id: 'ci-benchmark', label: 'CI & Benchmark', icon: RefreshCw },
   ];
 
   return (
     <header className="border-b border-zinc-800 bg-zinc-950 text-zinc-100 sticky top-0 z-40">
       {/* Top Banner */}
-      <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-indigo-600 to-violet-700 flex items-center justify-center text-white font-bold shadow-lg shadow-cyan-500/20 border border-cyan-400/30">
-            <Layers className="w-6 h-6" />
-          </div>
+          {/* Mascot Trigger Avatar (O'Reilly Style) */}
+          <button
+            id="header-mascot-badge"
+            type="button"
+            onClick={onOpenMascot}
+            title="Conhecer o Mascote VUA: O Pangolim de Governança (Estilo O'Reilly)"
+            className="w-10 h-10 rounded-xl bg-zinc-900 border border-amber-600/40 p-1 flex items-center justify-center text-white shrink-0 hover:border-amber-400 hover:scale-105 transition shadow-md shadow-amber-950/20 group relative"
+          >
+            <img
+              src="/vua-mascot.jpg"
+              alt="Mascote VUA Pangolim O'Reilly"
+              className="w-full h-full object-contain rounded-lg mix-blend-screen filter contrast-125"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/src/assets/images/vua_mascot_1788905946097.jpg';
+              }}
+            />
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+            </span>
+          </button>
+
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                VUA — VORTEX UNIVERSAL CONNECTOR
+                VUA
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/30 text-cyan-400">
-                  MULTI-OS & VCS ADAPTERS
+                  UNIVERSAL ADAPTER & GOVERNANCE
                 </span>
               </h1>
             </div>
             <p className="text-xs text-zinc-400">
-              Universal Adapters: GitHub • Linux POSIX • Android AOSP • Windows NT | RFC 8785 JCS • Ed25519
+              GitHub • Linux • Android • Windows | RFC 8785 JCS • Ed25519 ExecutionProof v1
             </p>
           </div>
         </div>
 
         {/* Status Indicators */}
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2.5 text-xs">
+          {onOpenMascot && (
+            <button
+              onClick={onOpenMascot}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-950/30 hover:bg-amber-900/40 border border-amber-700/40 text-amber-300 text-xs transition"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              Mascote O&apos;Reilly
+            </button>
+          )}
+
           {status?.identity && (
             <div className="hidden lg:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg">
               <Key className="w-3.5 h-3.5 text-indigo-400" />

@@ -1,6 +1,6 @@
 {
-  "name": "VUA - Vortex Universal Connector",
-  "description": "Vortex Universal Connector (VUA) with governed execution adapters for GitHub, Linux, Android, and Windows environments, powered by RFC 8785 JCS canonicalization, Ed25519 cryptographic identity, and multi-LLM orchestration.",
+  "name": "VUA",
+  "description": "VUA (Vortex Universal Adapter): Motor universal de governança, conformidade criptográfica Ed25519 + RFC 8785, adaptadores multi-ambiente e integração segura com GitHub e LLMs.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

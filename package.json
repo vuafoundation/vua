@@ -1,8 +1,12 @@
 {
-  "name": "react-example",
+  "name": "vua",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "./src/vortex/index.ts",
+  "bin": {
+    "vua": "./bin/vua.js"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
@@ -11,7 +15,9 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "tsx scripts/run-full-suite.ts",
-    "verify:gos3": "tsx scripts/verify-gos3-headers.ts --strict"
+    "verify:gos3": "tsx scripts/verify-gos3-headers.ts --strict",
+    "vua": "tsx bin/vua.js",
+    "bench": "tsx bin/vua.js bench"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

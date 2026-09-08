@@ -8,6 +8,19 @@ O **Vortex** é a implementação de referência da especificação de governan�
 
 ---
 
+## 📚 Guias Passo a Passo na Pasta `docs/`
+
+Para guias detalhados de instalação, execução mobile e integração:
+
+- 📖 [**docs/README.md**](./docs/README.md) — Índice mestre da documentação.
+- 📦 [**docs/01-visao-geral-e-instalacao.md**](./docs/01-visao-geral-e-instalacao.md) — CLI `vua`, biblioteca npm, diagnósticos de sistema.
+- 📱 [**docs/02-mobile-apk-sem-github.md**](./docs/02-mobile-apk-sem-github.md) — **Passo a passo detalhado para o Passo 2**: APK Android (`com.vortex.foundation.vua`), isolamento SELinux/Scoped Storage, execução sem dependência do GitHub via Capacitor ou Termux.
+- 🤖 [**docs/03-llm-browser-e-qwen-gemini.md**](./docs/03-llm-browser-e-qwen-gemini.md) — **Passo a passo detalhado para o Passo 3**: LLM no browser (WebGPU/Wasm), Qwen 2.5 Coder 0.5B local/offline e Google Gemini com API Key segura e prova Ed25519.
+- ⚡ [**docs/04-termux-e-alpine-proot.md**](./docs/04-termux-e-alpine-proot.md) — Execução em Termux, Alpine Linux (PRoot), benchmarks de latência (<370µs) e throughput (2.700+ ops/seg).
+- 🔌 [**docs/05-adapters-local-vs-github-remoto.md**](./docs/05-adapters-local-vs-github-remoto.md) — GitHub App Remota vs. Adaptadores para múltiplos apps locais (Linux, Android, Windows, MCP para Cursor/Claude/VSCode).
+
+---
+
 ## 📑 Sumário
 
 1. [Manual do Usuário & Consumidor LLM](#1-manual-do-usuário--consumidor-llm)

@@ -45,3 +45,5 @@ export function canonicalize(obj: unknown): string {
 
   return 'null';
 }
+
+export const canonicalizeRFC8785 = canonicalize;

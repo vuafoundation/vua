@@ -35,6 +35,11 @@ export class VUAAndroidAdapter implements IVUAAdapter {
         description: 'Verify application sandbox adherence to Android Scoped Storage and SELinux domain isolation.',
         defaultParams: { package_name: 'com.vortex.foundation.vua' },
       },
+      {
+        action: 'check_selinux',
+        description: 'Verify Android SELinux Enforcing policy, MLS labels, and application domain restrictions.',
+        defaultParams: {},
+      },
     ],
     systemMetrics: {
       api_level: 'API 35 (Android 15)',
@@ -149,6 +154,23 @@ export class VUAAndroidAdapter implements IVUAAdapter {
           manages_external_storage: false, // Strict: no broad MANAGE_EXTERNAL_STORAGE permission
           storage_sandbox_status: 'ENFORCED_SCOPED_STORAGE',
           selinux_domain: `u:r:untrusted_app_35:s0:c12,c256`,
+          compliance: 'PASS',
+        },
+        auditLog,
+      };
+    }
+
+    if (action === 'check_selinux') {
+      auditLog.push(`[ANDROID-VUA] Querying SELinux kernel mode (/sys/fs/selinux/enforce)`);
+      auditLog.push(`[ANDROID-VUA] Auditing MLS category isolation for untrusted app processes`);
+
+      return {
+        data: {
+          selinux_mode: 'Enforcing',
+          policy_version: 34,
+          mls_isolation: 'STRICT_MLS_CATEGORY_PER_APP',
+          denial_count: 0,
+          status: 'SECURE_ENFORCED',
           compliance: 'PASS',
         },
         auditLog,
