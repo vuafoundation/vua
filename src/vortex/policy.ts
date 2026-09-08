@@ -60,6 +60,46 @@ export const DEFAULT_DEV_POLICY: PolicyRule = {
       side_effect: true,
       approval: 'automatic',
     },
+    {
+      capability: 'llm.inference',
+      scope: {
+        paths: ['*'],
+        repositories: ['*'],
+        max_timeout_ms: 60000,
+      },
+      side_effect: false,
+      approval: 'automatic',
+    },
+    {
+      capability: 'vua.adapter.read',
+      scope: {
+        paths: ['*'],
+        repositories: ['*'],
+        max_timeout_ms: 30000,
+      },
+      side_effect: false,
+      approval: 'automatic',
+    },
+    {
+      capability: 'vua.adapter.execute',
+      scope: {
+        paths: ['*'],
+        repositories: ['*'],
+        max_timeout_ms: 30000,
+      },
+      side_effect: true,
+      approval: 'automatic',
+    },
+    {
+      capability: 'vua.adapter.write',
+      scope: {
+        paths: ['*'],
+        repositories: ['*'],
+        max_timeout_ms: 30000,
+      },
+      side_effect: true,
+      approval: 'required',
+    },
   ],
   prohibited_operations: [
     'repository.merge:main',

@@ -10,6 +10,8 @@
  */
 
 import { executeVortexPipeline } from './gateway.js';
+import { executeGovernedLLM, type LLMConfig, type LLMProviderType } from './llm.js';
+import { vuaRegistry } from './adapters/registry.js';
 import type { VortexOperation, VortexRequest, VortexResponse } from './types.js';
 
 export interface MCPToolDefinition {
@@ -131,6 +133,60 @@ export const VORTEX_MCP_TOOLS: MCPToolDefinition[] = [
       required: ['request_id', 'target', 'input', 'authorization'],
     },
   },
+  {
+    name: 'vortex.llm.invoke',
+    description: 'Executes a governed LLM inference request (Google Gemini via API Key, OpenAI-compatible, or Local LLM like Ollama / LM Studio) producing an Ed25519 ExecutionProof v1.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        request_id: { type: 'string' },
+        prompt: { type: 'string', description: 'User prompt or task for the model' },
+        provider: {
+          type: 'string',
+          enum: ['gemini', 'openai', 'ollama', 'lmstudio', 'custom'],
+          description: 'LLM Provider type (gemini, openai, ollama, lmstudio)',
+        },
+        model: { type: 'string', description: 'Model identifier (e.g. gemini-3.8-flash, llama3, gpt-4o-mini)' },
+        baseUrl: { type: 'string', description: 'Optional custom endpoint (e.g. http://localhost:11434 for Ollama)' },
+        apiKey: { type: 'string', description: 'Optional custom API key for cloud providers' },
+        temperature: { type: 'number' },
+        maxTokens: { type: 'number' },
+        systemInstruction: { type: 'string' },
+      },
+      required: ['prompt'],
+    },
+  },
+  {
+    name: 'vua.adapters.list',
+    description: 'Lists all available VUA (Vortex Universal Connector) platform adapters (GitHub, Linux, Android, Windows) and their supported actions.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'vua.adapter.invoke',
+    description: 'Invokes a governed action on a VUA Universal Adapter (GitHub, Linux, Android, or Windows) with cryptographic Ed25519 proof emission.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        adapter_id: {
+          type: 'string',
+          enum: ['github', 'linux', 'android', 'windows'],
+          description: 'Target platform adapter identifier',
+        },
+        action: {
+          type: 'string',
+          description: 'Action to execute on adapter (e.g. inspect_repo, exec_command, adb_shell, powershell_exec)',
+        },
+        target: { type: 'object', description: 'Target metadata' },
+        payload: { type: 'object', description: 'Action parameters' },
+        approval_token: { type: 'string', description: 'Approval token if required' },
+      },
+      required: ['adapter_id', 'action'],
+    },
+  },
 ];
 
 /**
@@ -162,6 +218,80 @@ export async function handleMCPMessage(message: {
   if (method === 'tools/call') {
     const toolName = params?.name as string;
     const args = (params?.arguments as Record<string, unknown>) || {};
+
+    if (toolName === 'vortex.llm.invoke') {
+      const prompt = (args.prompt as string) || '';
+      const provider = ((args.provider as string) || 'gemini') as LLMProviderType;
+      const model = (args.model as string) || (provider === 'gemini' ? 'gemini-3.8-flash' : provider === 'ollama' ? 'llama3' : 'gpt-4o-mini');
+      const config: LLMConfig = {
+        provider,
+        model,
+        baseUrl: args.baseUrl as string,
+        apiKey: args.apiKey as string,
+        temperature: typeof args.temperature === 'number' ? args.temperature : 0.7,
+        maxTokens: typeof args.maxTokens === 'number' ? args.maxTokens : 2048,
+        systemInstruction: args.systemInstruction as string,
+      };
+
+      try {
+        const llmResult = await executeGovernedLLM(prompt, config, args.request_id as string);
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            text: llmResult.text,
+            provider: llmResult.provider,
+            model: llmResult.model,
+            usage: llmResult.usage,
+            duration_ms: llmResult.duration_ms,
+            execution_proof: llmResult.execution_proof,
+            verification: llmResult.verification,
+          },
+        };
+      } catch (err: any) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32603, message: `LLM Execution Error: ${err.message || String(err)}` },
+        };
+      }
+    }
+
+    if (toolName === 'vua.adapters.list') {
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          connector: 'VUA - Vortex Universal Connector',
+          adapters: vuaRegistry.list(),
+        },
+      };
+    }
+
+    if (toolName === 'vua.adapter.invoke') {
+      const adapterId = args.adapter_id as any;
+      const action = args.action as string;
+      try {
+        const result = await vuaRegistry.invoke({
+          adapterId,
+          action,
+          target: args.target as Record<string, unknown>,
+          payload: args.payload as Record<string, unknown>,
+          approvalToken: args.approval_token as string,
+        });
+        return {
+          jsonrpc: '2.0',
+          id,
+          result,
+        };
+      } catch (err: any) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32603, message: `VUA Adapter Error: ${err.message || String(err)}` },
+        };
+      }
+    }
 
     let operation: VortexOperation = 'execute';
     if (toolName === 'vortex.inspect') operation = 'inspect';

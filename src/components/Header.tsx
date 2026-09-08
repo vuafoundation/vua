@@ -7,7 +7,9 @@ import {
   CheckCircle2,
   Terminal,
   FileCheck,
-  Server
+  Server,
+  Cpu,
+  Layers
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -45,7 +47,9 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const navItems = [
+    { id: 'vua-adapters', label: 'VUA Universal Adapters', icon: Layers },
     { id: 'workbench', label: 'MCP Workbench', icon: Terminal },
+    { id: 'llm-gateway', label: 'Multi-LLM Gateway', icon: Cpu },
     { id: 'verifier', label: 'Independent Verifier', icon: Shield },
     { id: 'e2e', label: 'Foundation 10 E2E', icon: CheckCircle2 },
     { id: 'adversarial', label: 'Adversarial Suite', icon: FileCheck },
@@ -58,20 +62,20 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Banner */}
       <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-700 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/20 border border-indigo-400/30">
-            <Shield className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-indigo-600 to-violet-700 flex items-center justify-center text-white font-bold shadow-lg shadow-cyan-500/20 border border-cyan-400/30">
+            <Layers className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                VORTEX MCP SERVER
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/30 text-emerald-400">
-                  FOUNDATION CONFORMANT
+                VUA — VORTEX UNIVERSAL CONNECTOR
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/30 text-cyan-400">
+                  MULTI-OS & VCS ADAPTERS
                 </span>
               </h1>
             </div>
             <p className="text-xs text-zinc-400">
-              Execution Governance Profile over Model Context Protocol • RFC 8785 JCS • Ed25519
+              Universal Adapters: GitHub • Linux POSIX • Android AOSP • Windows NT | RFC 8785 JCS • Ed25519
             </p>
           </div>
         </div>

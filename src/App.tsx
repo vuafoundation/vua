@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header.js';
+import { VUAAdaptersView } from './components/VUAAdaptersView.js';
 import { ProtocolWorkbench } from './components/ProtocolWorkbench.js';
+import { LLMGatewayView } from './components/LLMGatewayView.js';
 import { IndependentVerifierView } from './components/IndependentVerifierView.js';
 import { FoundationE2ESuite } from './components/FoundationE2ESuite.js';
 import { AdversarialMatrix } from './components/AdversarialMatrix.js';
@@ -9,7 +11,7 @@ import { CIBenchmarkGate } from './components/CIBenchmarkGate.js';
 import type { ExecutionProof } from './vortex/types.js';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('workbench');
+  const [activeTab, setActiveTab] = useState<string>('vua-adapters');
   const [status, setStatus] = useState<any>(null);
   const [selectedProofForVerification, setSelectedProofForVerification] = useState<ExecutionProof | null>(null);
   const [activeSessions, setActiveSessions] = useState<Array<{ session_id: string; resource: string }>>([]);
@@ -65,10 +67,20 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+        {activeTab === 'vua-adapters' && (
+          <VUAAdaptersView onSendToVerifier={handleSendToVerifier} />
+        )}
+
         {activeTab === 'workbench' && (
           <ProtocolWorkbench
             onSendToVerifier={handleSendToVerifier}
             activeSessions={activeSessions}
+          />
+        )}
+
+        {activeTab === 'llm-gateway' && (
+          <LLMGatewayView
+            onSendToVerifier={handleSendToVerifier}
           />
         )}
 

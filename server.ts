@@ -6,7 +6,7 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { runAdversarialSuite, runFoundationE2ESuite } from './src/vortex/conformance.js';
+import { runAdversarialSuite, runFoundationE2ESuite, runVUAAdaptersE2ESuite } from './src/vortex/conformance.js';
 import { generateVortexIdentity, KEY_REGISTRY } from './src/vortex/crypto.js';
 import { evaluateBenchmarkGate, generateExecutionEvidence } from './src/vortex/evidence.js';
 import {
@@ -17,7 +17,9 @@ import {
   setVortexIdentity,
 } from './src/vortex/gateway.js';
 import { createGOS3Session, listActiveSessions, onboardResource } from './src/vortex/gos3.js';
+import { executeGovernedLLM, probeLocalLLM, type LLMConfig } from './src/vortex/llm.js';
 import { handleMCPMessage, VORTEX_MCP_TOOLS } from './src/vortex/mcp-server.js';
+import { vuaRegistry } from './src/vortex/adapters/registry.js';
 import { verifyExecutionProof } from './src/vortex/verifier.js';
 
 const PORT = 3000;
@@ -211,6 +213,170 @@ async function startServer() {
   app.post('/api/vortex/reset-replay', (req, res) => {
     resetAntiReplayCache();
     res.json({ status: 'ok', message: 'Anti-replay nonce cache cleared' });
+  });
+
+  // 14. LLM Providers Info
+  app.get('/api/vortex/llm/providers', (req, res) => {
+    res.json({
+      providers: [
+        {
+          id: 'gemini',
+          name: 'Google Gemini',
+          type: 'cloud_api_key',
+          default_model: 'gemini-3.8-flash',
+          models: ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'],
+          has_server_key: Boolean(process.env.GEMINI_API_KEY),
+          description: 'High-speed multimodality via @google/genai with server-side key',
+        },
+        {
+          id: 'openai',
+          name: 'OpenAI / Compatible Cloud',
+          type: 'cloud_api_key',
+          default_model: 'gpt-4o-mini',
+          models: ['gpt-4o-mini', 'gpt-4o', 'deepseek-chat', 'claude-3-5-sonnet'],
+          has_server_key: Boolean(process.env.OPENAI_API_KEY),
+          description: 'OpenAI, Groq, DeepSeek, or custom cloud endpoints with API key',
+        },
+        {
+          id: 'ollama',
+          name: 'Ollama (Local LLM)',
+          type: 'local',
+          default_url: 'http://localhost:11434',
+          default_model: 'llama3',
+          models: ['llama3', 'llama3.2', 'mistral', 'qwen2.5', 'phi3', 'gemma2', 'deepseek-r1'],
+          description: 'Zero-cloud local inference running on localhost:11434 with zero data leakage',
+        },
+        {
+          id: 'lmstudio',
+          name: 'LM Studio / vLLM (Local LLM)',
+          type: 'local',
+          default_url: 'http://localhost:1234/v1',
+          default_model: 'local-model',
+          models: ['local-model'],
+          description: 'Local OpenAI-compatible engine on localhost:1234 or vLLM',
+        },
+      ],
+    });
+  });
+
+  // 15. Probe Local LLM Connectivity
+  app.post('/api/vortex/llm/probe', async (req, res) => {
+    try {
+      const { provider, baseUrl } = req.body;
+      const probeResult = await probeLocalLLM(provider || 'ollama', baseUrl);
+      res.json(probeResult);
+    } catch (err: any) {
+      res.status(500).json({
+        online: false,
+        error: err.message || String(err),
+      });
+    }
+  });
+
+  // 16. Governed LLM Generation (Dual Cloud API Key & Local LLM)
+  app.post('/api/vortex/llm/generate', async (req, res) => {
+    try {
+      const { prompt, config, request_id } = req.body;
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({ error: 'Field "prompt" is required' });
+      }
+
+      const llmConfig: LLMConfig = {
+        provider: config?.provider || 'gemini',
+        model: config?.model || (config?.provider === 'gemini' ? 'gemini-3.8-flash' : config?.provider === 'ollama' ? 'llama3' : 'gpt-4o-mini'),
+        baseUrl: config?.baseUrl,
+        apiKey: config?.apiKey,
+        temperature: config?.temperature,
+        maxTokens: config?.maxTokens,
+        systemInstruction: config?.systemInstruction,
+      };
+
+      const result = await executeGovernedLLM(prompt, llmConfig, request_id);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({
+        error: err.message || String(err),
+        provider: req.body?.config?.provider,
+      });
+    }
+  });
+
+  // 17. VUA - Vortex Universal Connector: List Adapters
+  app.get('/api/vua/adapters', (req, res) => {
+    try {
+      const adapters = vuaRegistry.list();
+      res.json({
+        connector: 'VUA - Vortex Universal Connector',
+        version: '2.5.0',
+        standards: ['RFC 8785 JCS', 'Ed25519 ExecutionProof v1', 'GOS3 §8 Contract Headers'],
+        adapters,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || String(err) });
+    }
+  });
+
+  // 18. VUA - Probe Adapter Status
+  app.post('/api/vua/adapters/:id/probe', async (req, res) => {
+    try {
+      const id = req.params.id as any;
+      const adapter = vuaRegistry.get(id);
+      if (!adapter) {
+        return res.status(404).json({ error: `Adapter '${id}' not found` });
+      }
+      const probe = await adapter.probeStatus();
+      res.json({
+        adapter: id,
+        ...probe,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || String(err) });
+    }
+  });
+
+  // 19. VUA - Governed Adapter Action Invocation
+  app.post('/api/vua/adapters/:id/invoke', async (req, res) => {
+    try {
+      const id = req.params.id as any;
+      const { action, target, payload, approval_token, request_id } = req.body;
+      if (!action) {
+        return res.status(400).json({ error: 'Field "action" is required' });
+      }
+
+      const result = await vuaRegistry.invoke({
+        adapterId: id,
+        action,
+        target,
+        payload,
+        approvalToken: approval_token,
+        requestId: request_id,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: err.message || String(err),
+        adapter: req.params.id,
+      });
+    }
+  });
+
+  // 20. VUA - Run Multi-Environment Conformance Suite
+  app.post('/api/vua/conformance', async (req, res) => {
+    try {
+      const results = await runVUAAdaptersE2ESuite();
+      const allPassed = results.every((r) => r.passed);
+      res.json({
+        suite: 'VUA Multi-Environment Conformance Suite',
+        status: allPassed ? 'PASS' : 'FAIL',
+        total_tests: results.length,
+        passed_tests: results.filter((r) => r.passed).length,
+        results,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || String(err) });
+    }
   });
 
   // Vite middleware for development

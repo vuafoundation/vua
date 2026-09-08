@@ -525,3 +525,93 @@ export async function runFoundationE2ESuite(): Promise<FoundationE2EResult[]> {
 
   return suite;
 }
+
+/**
+ * Execute VUA Multi-Environment Conformance Suite
+ * Tests all 4 platform adapters: GitHub, Linux, Android, and Windows.
+ */
+export async function runVUAAdaptersE2ESuite(): Promise<{
+  adapter: string;
+  action: string;
+  passed: boolean;
+  duration_ms: number;
+  proof_verified: boolean;
+  output: Record<string, unknown>;
+}[]> {
+  const { vuaRegistry } = await import('./adapters/registry.js');
+  const results: any[] = [];
+
+  // 1. GitHub Adapter: inspect_repo
+  {
+    const t0 = Date.now();
+    const res = await vuaRegistry.invoke({
+      adapterId: 'github',
+      action: 'inspect_repo',
+      target: { owner: 'vortex-foundation', repo: 'vua-connector' },
+    });
+    results.push({
+      adapter: 'github',
+      action: 'inspect_repo',
+      passed: res.success && res.verification?.valid === true,
+      duration_ms: Date.now() - t0,
+      proof_verified: res.verification?.valid === true,
+      output: res.data,
+    });
+  }
+
+  // 2. Linux Adapter: inspect_system & sandbox jail check
+  {
+    const t0 = Date.now();
+    const res = await vuaRegistry.invoke({
+      adapterId: 'linux',
+      action: 'sandbox_jail_check',
+      payload: { test_path: '/tmp/vua-sandbox/../etc/shadow' },
+    });
+    results.push({
+      adapter: 'linux',
+      action: 'sandbox_jail_check',
+      passed: res.success && res.verification?.valid === true && res.data.containment_secure === true,
+      duration_ms: Date.now() - t0,
+      proof_verified: res.verification?.valid === true,
+      output: res.data,
+    });
+  }
+
+  // 3. Android Adapter: verify_apk & scoped_storage_audit
+  {
+    const t0 = Date.now();
+    const res = await vuaRegistry.invoke({
+      adapterId: 'android',
+      action: 'verify_apk',
+      payload: { package_name: 'com.vortex.foundation.vua' },
+    });
+    results.push({
+      adapter: 'android',
+      action: 'verify_apk',
+      passed: res.success && res.verification?.valid === true && res.data.apk_signing_scheme_v2 === true,
+      duration_ms: Date.now() - t0,
+      proof_verified: res.verification?.valid === true,
+      output: res.data,
+    });
+  }
+
+  // 4. Windows Adapter: inspect_acls & powershell_exec
+  {
+    const t0 = Date.now();
+    const res = await vuaRegistry.invoke({
+      adapterId: 'windows',
+      action: 'inspect_acls',
+      payload: { path: 'C:\\VUA\\Sandbox\\secure_payload.dat' },
+    });
+    results.push({
+      adapter: 'windows',
+      action: 'inspect_acls',
+      passed: res.success && res.verification?.valid === true && res.data.dacl_compliant === true,
+      duration_ms: Date.now() - t0,
+      proof_verified: res.verification?.valid === true,
+      output: res.data,
+    });
+  }
+
+  return results;
+}
