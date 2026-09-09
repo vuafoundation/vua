@@ -16,6 +16,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { executeVortexPipeline } from './gateway.js';
+import { getOrCreateGOS3Session } from './gos3.js';
 import { verifyExecutionProof } from './verifier.js';
 import type { ExecutionProof, VerificationResult, VortexRequest } from './types.js';
 
@@ -29,6 +30,7 @@ export interface LLMConfig {
   temperature?: number;
   maxTokens?: number;
   systemInstruction?: string;
+  timeoutMs?: number;
 }
 
 export interface LLMInvocationResult {
@@ -112,8 +114,9 @@ async function callOllama(
   const baseUrl = (config.baseUrl || process.env.LOCAL_LLM_URL || 'http://localhost:11434').replace(/\/$/, '');
   const modelName = config.model || 'llama3';
 
+  const timeoutMs = config.timeoutMs || 180000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(`${baseUrl}/api/generate`, {
@@ -151,7 +154,9 @@ async function callOllama(
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      throw new Error(`Local Ollama request timed out at ${baseUrl}`);
+      throw new Error(
+        `Local Ollama request timed out at ${baseUrl} after ${timeoutMs / 1000}s (generating code on CPU requires more time; you can increase timeoutMs)`
+      );
     }
     if (err.code === 'ECONNREFUSED' || err.message?.includes('fetch failed')) {
       throw new Error(
@@ -303,27 +308,21 @@ export async function executeGovernedLLM(
   requestId?: string
 ): Promise<LLMInvocationResult> {
   const reqId = requestId || `req-llm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const t0 = Date.now();
+  const resource = `llm://${config.provider}/${config.model}`;
 
-  // 1. Dispatch actual generation depending on provider
-  let rawResult: { text: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } };
+  // 1. Establish authentic active GOS3 session for LLM resource
+  const gos3Session = getOrCreateGOS3Session('scoobiii', 'agent/vortex', resource);
 
-  if (config.provider === 'gemini') {
-    rawResult = await callGemini(prompt, config);
-  } else if (config.provider === 'ollama') {
-    rawResult = await callOllama(prompt, config);
-  } else {
-    rawResult = await callOpenAICompatible(prompt, config);
-  }
+  let rawResult: { text: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } } = {
+    text: '',
+  };
 
-  const durationMs = Date.now() - t0;
-
-  // 2. Wrap through Vortex Execution Gateway to emit ExecutionProof v1
+  // 2. Prepare Vortex Request with bound GOS3 session and parameters
   const vortexRequest: VortexRequest = {
     request_id: reqId,
     operation: 'execute',
     target: {
-      resource: `llm://${config.provider}/${config.model}`,
+      resource,
       provider: config.provider,
       model: config.model,
     },
@@ -333,6 +332,7 @@ export async function executeGovernedLLM(
       policy_id: 'vortex-development',
       policy_version: '1.0.0',
       capability: 'llm.inference',
+      gos3_session_id: gos3Session.session_id,
       scope: {
         paths: ['*'],
         repositories: ['*'],
@@ -346,13 +346,35 @@ export async function executeGovernedLLM(
     },
   };
 
-  const pipelineResponse = await executeVortexPipeline(vortexRequest);
+  // 3. Execute inside Gateway boundary: measures real duration and hashes real output
+  const pipelineResponse = await executeVortexPipeline(vortexRequest, async () => {
+    if (config.provider === 'gemini') {
+      rawResult = await callGemini(prompt, config);
+    } else if (config.provider === 'ollama') {
+      rawResult = await callOllama(prompt, config);
+    } else {
+      rawResult = await callOpenAICompatible(prompt, config);
+    }
 
-  // 3. Run Independent Verifier on the generated proof
+    return {
+      text: rawResult.text,
+      model: config.model,
+      provider: config.provider,
+      usage: rawResult.usage,
+    };
+  });
+
+  if (pipelineResponse.error && pipelineResponse.status !== 'EXECUTION_SUCCESS') {
+    throw new Error(pipelineResponse.error.message || `LLM invocation failed: ${pipelineResponse.status}`);
+  }
+
+  // 4. Run Independent Verifier on the generated proof
   let verification: VerificationResult | undefined;
   if (pipelineResponse.execution_proof) {
     verification = verifyExecutionProof(pipelineResponse.execution_proof);
   }
+
+  const durationMs = pipelineResponse.execution_proof?.duration_ms ?? 0;
 
   return {
     text: rawResult.text,

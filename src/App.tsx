@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header.js';
 import { VUAAdaptersView } from './components/VUAAdaptersView.js';
+import { GitHubRepoManager } from './components/GitHubRepoManager.js';
 import { ProtocolWorkbench } from './components/ProtocolWorkbench.js';
 import { LLMGatewayView } from './components/LLMGatewayView.js';
 import { IndependentVerifierView } from './components/IndependentVerifierView.js';
@@ -8,6 +9,7 @@ import { FoundationE2ESuite } from './components/FoundationE2ESuite.js';
 import { AdversarialMatrix } from './components/AdversarialMatrix.js';
 import { GOS3SandboxManager } from './components/GOS3SandboxManager.js';
 import { CIBenchmarkGate } from './components/CIBenchmarkGate.js';
+import { MascotModal } from './components/MascotModal.js';
 import type { ExecutionProof } from './vortex/types.js';
 
 export default function App() {
@@ -15,6 +17,7 @@ export default function App() {
   const [status, setStatus] = useState<any>(null);
   const [selectedProofForVerification, setSelectedProofForVerification] = useState<ExecutionProof | null>(null);
   const [activeSessions, setActiveSessions] = useState<Array<{ session_id: string; resource: string }>>([]);
+  const [isMascotOpen, setIsMascotOpen] = useState<boolean>(false);
 
   const fetchStatus = async () => {
     try {
@@ -63,12 +66,20 @@ export default function App() {
         onRotateKey={handleRotateKey}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        onOpenMascot={() => setIsMascotOpen(true)}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {activeTab === 'vua-adapters' && (
           <VUAAdaptersView onSendToVerifier={handleSendToVerifier} />
+        )}
+
+        {activeTab === 'github-manager' && (
+          <GitHubRepoManager
+            onSendToVerifier={handleSendToVerifier}
+            onOpenMascot={() => setIsMascotOpen(true)}
+          />
         )}
 
         {activeTab === 'workbench' && (
@@ -110,12 +121,18 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-zinc-900 bg-zinc-950 py-4 px-6 text-center text-xs text-zinc-500">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <span>Vortex Foundation Execution Governance Specification v1 • Open Protocol</span>
+          <span>VUA (Vortex Universal Adapter) • Open Governance Protocol</span>
           <span className="font-mono text-[11px] text-zinc-400">
             SAFETY = AUTHORIZATION + BOUNDED EXECUTION + ACCOUNTABILITY + INDEPENDENT VERIFICATION + IDENTITY
           </span>
         </div>
       </footer>
+
+      {/* VUA O'Reilly Mascot Modal */}
+      <MascotModal
+        isOpen={isMascotOpen}
+        onClose={() => setIsMascotOpen(false)}
+      />
     </div>
   );
 }

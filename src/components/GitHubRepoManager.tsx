@@ -16,6 +16,10 @@ import {
   FolderGit2,
   GitCommit,
   GitPullRequest,
+  GitMerge,
+  FileText,
+  FileCode,
+  Send,
   Check,
   Star,
   GitFork,
@@ -106,6 +110,32 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
   const [executingAction, setExecutingAction] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<any | null>(null);
   const [lastEmittedProof, setLastEmittedProof] = useState<ExecutionProof | null>(null);
+
+  // Workflow mode
+  const [workflowTab, setWorkflowTab] = useState<'quick' | 'write_pr' | 'write_commit' | 'merge_pr'>('quick');
+
+  // PR Form
+  const [prForm, setPrForm] = useState({
+    title: 'feat: implementar adaptador universal e governança de merge no VUA',
+    head: 'feature/vua-governance',
+    base: 'main',
+    body: `## ⚡ VUA Governed Pull Request\n\n### Sumário\nProposta de Pull Request assinada e validada pelo motor **VUA (Vortex Universal Adapter)** com atestação criptográfica.\n\n### Checklist de Governança GOS3\n- [x] RFC 8785 JCS Canonicalization Aprovada\n- [x] Assinatura Ed25519 Válida\n- [x] Sandbox Zero-Leakage Verificado\n- [x] Regra de Ouro: CI 100% PASS → mergeability OK → merge`,
+  });
+
+  // Commit Form
+  const [commitForm, setCommitForm] = useState({
+    branch: 'feature/vua-governance',
+    filePath: 'src/vua-manifest.json',
+    message: 'feat: add VUA governed manifest and Ed25519 identity metadata',
+    content: '{\n  "vua_version": "1.2.0",\n  "adapter": "github",\n  "governance": "GOS3_COMPLIANT",\n  "canon": "RFC_8785_JCS"\n}',
+  });
+
+  // Merge Form
+  const [mergeForm, setMergeForm] = useState({
+    prNumber: 42,
+    mergeMethod: 'squash' as 'squash' | 'merge' | 'rebase',
+    commitTitle: 'Merge pull request #42 from feature/vua-governance',
+  });
 
   // Fetch initial status & repos
   const fetchStatusAndRepos = async () => {
@@ -573,57 +603,338 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
               </div>
             </div>
 
-            {/* Quick Governed Actions */}
-            <div className="mt-4">
-              <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-2">
-                Ações Governamentais com Atestação Criptográfica
-              </span>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {/* Governed Workflow Tabs */}
+            <div className="mt-4 pt-3 border-t border-zinc-800">
+              <div className="flex items-center gap-1 mb-3 bg-zinc-950 p-1 rounded-lg border border-zinc-800/80 overflow-x-auto">
                 <button
-                  id="btn-action-inspect-repo"
-                  onClick={() => handleExecuteAction('inspect_repo')}
-                  disabled={Boolean(executingAction)}
-                  className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  type="button"
+                  onClick={() => setWorkflowTab('quick')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition ${
+                    workflowTab === 'quick'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  }`}
                 >
-                  <Search className="w-4 h-4 text-cyan-400 mb-1" />
-                  <div className="text-xs font-medium text-zinc-200">Inspecionar Repo</div>
-                  <div className="text-[10px] text-zinc-500">Regras e status</div>
+                  <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                  Ações Rápidas
                 </button>
 
                 <button
-                  id="btn-action-verify-commit"
-                  onClick={() => handleExecuteAction('verify_commit')}
-                  disabled={Boolean(executingAction)}
-                  className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  type="button"
+                  onClick={() => setWorkflowTab('write_pr')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition ${
+                    workflowTab === 'write_pr'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  }`}
                 >
-                  <GitCommit className="w-4 h-4 text-emerald-400 mb-1" />
-                  <div className="text-xs font-medium text-zinc-200">Verificar Commit</div>
-                  <div className="text-[10px] text-zinc-500">Assinatura Ed25519</div>
+                  <GitPullRequest className="w-3.5 h-3.5 text-violet-400" />
+                  Escrever & Criar PR
                 </button>
 
                 <button
-                  id="btn-action-check-ci"
-                  onClick={() => handleExecuteAction('check_ci_run')}
-                  disabled={Boolean(executingAction)}
-                  className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  type="button"
+                  onClick={() => setWorkflowTab('write_commit')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition ${
+                    workflowTab === 'write_commit'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  }`}
                 >
-                  <CheckCircle2 className="w-4 h-4 text-indigo-400 mb-1" />
-                  <div className="text-xs font-medium text-zinc-200">Quality Gates CI</div>
-                  <div className="text-[10px] text-zinc-500">10/10 Gates PASS</div>
+                  <GitCommit className="w-3.5 h-3.5 text-emerald-400" />
+                  Gravar Commit em Branch
                 </button>
 
                 <button
-                  id="btn-action-propose-pr"
-                  onClick={() => handleExecuteAction('propose_pr', { title: 'feat: update VUA security policy' })}
-                  disabled={Boolean(executingAction)}
-                  className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  type="button"
+                  onClick={() => setWorkflowTab('merge_pr')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition ${
+                    workflowTab === 'merge_pr'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  }`}
                 >
-                  <GitPullRequest className="w-4 h-4 text-violet-400 mb-1" />
-                  <div className="text-xs font-medium text-zinc-200">Propor Patch PR</div>
-                  <div className="text-[10px] text-zinc-500">Patch RFC 8785</div>
+                  <GitMerge className="w-3.5 h-3.5 text-amber-400" />
+                  Merge no Git
                 </button>
               </div>
+
+              {/* Subview 1: Quick Actions */}
+              {workflowTab === 'quick' && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    id="btn-action-inspect-repo"
+                    onClick={() => handleExecuteAction('inspect_repo')}
+                    disabled={Boolean(executingAction)}
+                    className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  >
+                    <Search className="w-4 h-4 text-cyan-400 mb-1" />
+                    <div className="text-xs font-medium text-zinc-200">Inspecionar Repo</div>
+                    <div className="text-[10px] text-zinc-500">Regras e status</div>
+                  </button>
+
+                  <button
+                    id="btn-action-verify-commit"
+                    onClick={() => handleExecuteAction('verify_commit')}
+                    disabled={Boolean(executingAction)}
+                    className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  >
+                    <GitCommit className="w-4 h-4 text-emerald-400 mb-1" />
+                    <div className="text-xs font-medium text-zinc-200">Verificar Commit</div>
+                    <div className="text-[10px] text-zinc-500">Assinatura Ed25519</div>
+                  </button>
+
+                  <button
+                    id="btn-action-check-ci"
+                    onClick={() => handleExecuteAction('check_ci_run')}
+                    disabled={Boolean(executingAction)}
+                    className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-indigo-400 mb-1" />
+                    <div className="text-xs font-medium text-zinc-200">Quality Gates CI</div>
+                    <div className="text-[10px] text-zinc-500">10/10 Gates PASS</div>
+                  </button>
+
+                  <button
+                    id="btn-action-propose-pr"
+                    onClick={() => handleExecuteAction('propose_pr', { title: 'feat: update VUA security policy' })}
+                    disabled={Boolean(executingAction)}
+                    className="p-2.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left transition hover:border-zinc-700"
+                  >
+                    <GitPullRequest className="w-4 h-4 text-violet-400 mb-1" />
+                    <div className="text-xs font-medium text-zinc-200">Propor Patch PR</div>
+                    <div className="text-[10px] text-zinc-500">Patch RFC 8785</div>
+                  </button>
+                </div>
+              )}
+
+              {/* Subview 2: Write and Create PR */}
+              {workflowTab === 'write_pr' && (
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                      <GitPullRequest className="w-3.5 h-3.5 text-violet-400" />
+                      Gerar e Publicar Pull Request Escrita
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                      POST /repos/{activeTarget.owner}/{activeTarget.repo}/pulls
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-mono text-zinc-400 block mb-1">Branch Origem (Head)</label>
+                      <input
+                        type="text"
+                        value={prForm.head}
+                        onChange={(e) => setPrForm({ ...prForm, head: e.target.value })}
+                        placeholder="feature/vua-governance"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:border-violet-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono text-zinc-400 block mb-1">Branch Destino (Base)</label>
+                      <input
+                        type="text"
+                        value={prForm.base}
+                        onChange={(e) => setPrForm({ ...prForm, base: e.target.value })}
+                        placeholder="main"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:border-violet-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-mono text-zinc-400 block mb-1">Título da Pull Request</label>
+                    <input
+                      type="text"
+                      value={prForm.title}
+                      onChange={(e) => setPrForm({ ...prForm, title: e.target.value })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:border-violet-500 focus:outline-none font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-mono text-zinc-400 block mb-1">Corpo / Descrição do PR (Markdown)</label>
+                    <textarea
+                      rows={4}
+                      value={prForm.body}
+                      onChange={(e) => setPrForm({ ...prForm, body: e.target.value })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs font-mono text-zinc-300 focus:border-violet-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-zinc-400">
+                      Gera prova criptográfica ExecutionProof v1 assinada por Ed25519.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteAction('create_pr_written', prForm)}
+                      disabled={Boolean(executingAction)}
+                      className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      {executingAction === 'create_pr_written' ? 'Publicando PR...' : 'Gerar e Enviar PR no Git'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Subview 3: Write Branch Commit */}
+              {workflowTab === 'write_commit' && (
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                      <GitCommit className="w-3.5 h-3.5 text-emerald-400" />
+                      Gravar Arquivo e Criar Commit Assinado em Branch
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                      PUT /repos/{activeTarget.owner}/{activeTarget.repo}/contents
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-mono text-zinc-400 block mb-1">Branch</label>
+                      <input
+                        type="text"
+                        value={commitForm.branch}
+                        onChange={(e) => setCommitForm({ ...commitForm, branch: e.target.value })}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono text-zinc-400 block mb-1">Caminho do Arquivo (File Path)</label>
+                      <input
+                        type="text"
+                        value={commitForm.filePath}
+                        onChange={(e) => setCommitForm({ ...commitForm, filePath: e.target.value })}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-mono text-zinc-400 block mb-1">Mensagem do Commit</label>
+                    <input
+                      type="text"
+                      value={commitForm.message}
+                      onChange={(e) => setCommitForm({ ...commitForm, message: e.target.value })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-mono text-zinc-400 block mb-1">Conteúdo do Arquivo</label>
+                    <textarea
+                      rows={3}
+                      value={commitForm.content}
+                      onChange={(e) => setCommitForm({ ...commitForm, content: e.target.value })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs font-mono text-zinc-300 focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-zinc-400">
+                      Calcula digest SHA-256 e anexa assinatura Ed25519 à árvore Git.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteAction('write_branch_commit', {
+                        branch: commitForm.branch,
+                        file_path: commitForm.filePath,
+                        content: commitForm.content,
+                        message: commitForm.message,
+                      })}
+                      disabled={Boolean(executingAction)}
+                      className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <GitCommit className="w-3.5 h-3.5" />
+                      {executingAction === 'write_branch_commit' ? 'Gravando Commit...' : 'Gravar Commit no Git'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Subview 4: Governed Merge in Git */}
+              {workflowTab === 'merge_pr' && (
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                      <GitMerge className="w-3.5 h-3.5 text-amber-400" />
+                      Executar Merge Governado no Git
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                      PUT /repos/{activeTarget.owner}/{activeTarget.repo}/pulls/{mergeForm.prNumber}/merge
+                    </span>
+                  </div>
+
+                  {/* Golden Rule Banner */}
+                  <div className="p-2.5 rounded-lg bg-amber-950/20 border border-amber-500/30 flex items-start gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                      <span className="font-semibold text-amber-300 block">Regra de Ouro da Governança VUA:</span>
+                      <span className="font-mono text-[11px] text-zinc-300">
+                        CI 100% PASS → mergeability OK → merge
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-mono text-zinc-400 block mb-1">Número do Pull Request (#)</label>
+                      <input
+                        type="number"
+                        value={mergeForm.prNumber}
+                        onChange={(e) => setMergeForm({ ...mergeForm, prNumber: Number(e.target.value) })}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono text-zinc-400 block mb-1">Método de Merge</label>
+                      <select
+                        value={mergeForm.mergeMethod}
+                        onChange={(e) => setMergeForm({ ...mergeForm, mergeMethod: e.target.value as any })}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:border-amber-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="squash">Squash and merge (Recomendado)</option>
+                        <option value="merge">Create a merge commit</option>
+                        <option value="rebase">Rebase and merge</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-mono text-zinc-400 block mb-1">Título do Commit de Merge</label>
+                    <input
+                      type="text"
+                      value={mergeForm.commitTitle}
+                      onChange={(e) => setMergeForm({ ...mergeForm, commitTitle: e.target.value })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-zinc-400">
+                      O merge só é autorizado se todos os 10 Gates de Conformidade passarem.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteAction('merge_pr', {
+                        pull_number: mergeForm.prNumber,
+                        merge_method: mergeForm.mergeMethod,
+                        commit_title: mergeForm.commitTitle,
+                      })}
+                      disabled={Boolean(executingAction)}
+                      className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <GitMerge className="w-3.5 h-3.5" />
+                      {executingAction === 'merge_pr' ? 'Executando Merge...' : 'Executar Merge Governado'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

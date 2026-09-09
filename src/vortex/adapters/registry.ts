@@ -4,6 +4,7 @@
  */
 
 import { executeVortexPipeline } from '../gateway.js';
+import { getOrCreateGOS3Session } from '../gos3.js';
 import { verifyExecutionProof } from '../verifier.js';
 import type { VortexRequest } from '../types.js';
 import type {
@@ -50,24 +51,19 @@ class VUAAdapterRegistry {
       throw new Error(`Adapter '${request.adapterId}' is not registered in VUA`);
     }
 
-    const t0 = Date.now();
     const reqId = request.requestId || `vua-${request.adapterId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const resource = `vua://${request.adapterId}/${request.action}`;
+    const gos3Session = getOrCreateGOS3Session('scoobiii', 'agent/vua-connector', resource);
 
-    // 1. Execute the actual adapter logic
-    const { data, auditLog } = await adapter.executeAction(
-      request.action,
-      request.target || {},
-      request.payload || {}
-    );
+    let executionData: Record<string, unknown> = {};
+    let auditLog: any = [];
 
-    const durationMs = Date.now() - t0;
-
-    // 2. Wrap the execution in the Vortex Gateway to generate ExecutionProof v1
+    // 1. Prepare governed Vortex Request
     const vortexRequest: VortexRequest = {
       request_id: reqId,
       operation: 'execute',
       target: {
-        resource: `vua://${request.adapterId}/${request.action}`,
+        resource,
         adapter: request.adapterId,
         action: request.action,
         ...(request.target || {}),
@@ -78,6 +74,7 @@ class VUAAdapterRegistry {
         policy_id: 'vortex-development',
         policy_version: '1.0.0',
         capability: 'vua.adapter.execute',
+        gos3_session_id: gos3Session.session_id,
         scope: {
           paths: ['*'],
           repositories: ['*'],
@@ -91,13 +88,25 @@ class VUAAdapterRegistry {
       approval_token: request.approvalToken,
     };
 
-    const pipelineRes = await executeVortexPipeline(vortexRequest);
+    // 2. Execute within Gateway pipeline: records real timing and hashes real adapter output
+    const pipelineRes = await executeVortexPipeline(vortexRequest, async () => {
+      const execRes = await adapter.executeAction(
+        request.action,
+        request.target || {},
+        request.payload || {}
+      );
+      executionData = execRes.data;
+      auditLog = execRes.auditLog;
+      return execRes.data;
+    });
 
     // 3. Verify the generated proof
     let verification;
     if (pipelineRes.execution_proof) {
       verification = verifyExecutionProof(pipelineRes.execution_proof);
     }
+
+    const durationMs = pipelineRes.execution_proof?.duration_ms ?? 0;
 
     return {
       success: pipelineRes.status === 'EXECUTION_SUCCESS',
@@ -106,7 +115,7 @@ class VUAAdapterRegistry {
       environment: adapter.metadata.environment,
       timestamp: new Date().toISOString(),
       durationMs,
-      data,
+      data: executionData,
       auditLog,
       execution_proof: pipelineRes.execution_proof,
       verification,

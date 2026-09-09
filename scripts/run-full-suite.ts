@@ -336,7 +336,90 @@ async function main() {
     return 3;
   });
 
-  // 11. GENERATE DETERMINISTIC EVIDENCE HASH
+  // 11. PROOF OVER PROSE: OUTPUT HASH TRUTH & TEMPORAL INTEGRITY
+  await runStep('11. Proof Over Prose: Output Hash Truth & Temporal Invariants', async () => {
+    const auth = {
+      principal_id: 'scoobiii',
+      agent_id: 'agent/vortex',
+      policy_id: 'vortex-development',
+      policy_version: '1.0.0',
+      capability: 'sandbox.execute',
+      scope: { paths: ['*'], repositories: ['*'] },
+    };
+
+    // 1. Output hash divergence for different outputs
+    const resA = await executeVortexPipeline(
+      {
+        request_id: `req-truth-a-${Date.now()}`,
+        operation: 'execute',
+        target: { resource: 'llm://ollama/qwen2.5-coder' },
+        authorization: auth,
+        input: { prompt: 'Quantas ovelhas sobraram?' },
+      },
+      async () => ({ text: '8 ovelhas sobraram' })
+    );
+
+    const resB = await executeVortexPipeline(
+      {
+        request_id: `req-truth-b-${Date.now()}`,
+        operation: 'execute',
+        target: { resource: 'llm://ollama/qwen2.5-coder' },
+        authorization: auth,
+        input: { prompt: 'Qual é a capital da Austrália?' },
+      },
+      async () => ({ text: 'A capital da Austrália é Sydney' })
+    );
+
+    assert(!!resA.execution_proof && !!resB.execution_proof, 'Both executions must generate proofs');
+    assert(
+      resA.execution_proof!.output_hash !== resB.execution_proof!.output_hash,
+      `output_hash MUST reflect real output and differ between answers (A: ${resA.execution_proof!.output_hash}, B: ${resB.execution_proof!.output_hash})`
+    );
+
+    // 2. Real temporal duration tracking (proof.duration_ms matches completed_at - started_at)
+    const delayedRes = await executeVortexPipeline(
+      {
+        request_id: `req-temporal-${Date.now()}`,
+        operation: 'execute',
+        target: { resource: 'llm://ollama/qwen2.5-coder' },
+        authorization: auth,
+        input: { prompt: 'Simulate delay' },
+      },
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return { text: 'Done after delay' };
+      }
+    );
+    assert(delayedRes.execution_proof!.duration_ms >= 50, 'duration_ms must record real execution time >= 50ms');
+    const verifDelayed = verifyExecutionProof(delayedRes.execution_proof!);
+    assert(verifDelayed.valid === true, 'Verifier must validate temporal duration');
+
+    // 3. Verifier catches fraudulent duration divergence
+    const fraudulentProof = {
+      ...delayedRes.execution_proof!,
+      duration_ms: 1, // Fraudulent claim of 1ms while completed_at - started_at >= 50ms
+    };
+    // Re-sign with fraudulent duration
+    fraudulentProof.proof_hash = sha256(canonicalize(fraudulentProof));
+    const verifFraud = verifyExecutionProof(fraudulentProof);
+    // Verifier should reject either signature mismatch or duration drift if drift > 1000 or signature invalid
+    assert(verifFraud.valid === false, 'Verifier must reject manipulated proof');
+
+    // 4. Real workspace inspect test
+    const inspectRes = await executeVortexPipeline({
+      request_id: `req-inspect-real-${Date.now()}`,
+      operation: 'inspect',
+      target: { path: '.' },
+      input: {},
+    });
+    const tree = ((inspectRes.output as Record<string, unknown>)?.tree as string[]) || [];
+    assert(tree.includes('package.json'), 'vortex.inspect must return real workspace files, including package.json');
+    assert(tree.includes('server.ts'), 'vortex.inspect must return real workspace files, including server.ts');
+
+    return 4;
+  });
+
+  // 12. GENERATE DETERMINISTIC EVIDENCE HASH
   const evidence = generateExecutionEvidence({
     proofHashes: collectedProofHashes.length > 0 ? collectedProofHashes : ['sha256:dummy-proof-pass'],
     allTestsPassed: true,

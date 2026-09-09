@@ -1,54 +1,141 @@
-# 🛡️ Vortex MCP Server & Execution Gateway
+# 🛡️ VUA — Vortex Universal Adapter & Governed Execution Protocol
+
+<div align="center">
+
+![Mascote VUA - O Pangolim de Governança](./public/vua-mascot.jpg)
+
+### *O Pangolim da Governança e Execução Criptográfica*
+*(Mascote oficial no clássico estilo gravura xilogravura O'Reilly)*
+
+> *"Defendendo a verdade criptográfica, a neutralidade de sistemas operacionais e a integridade de execução delimitada sob as leis de GOS3 e RFC 8785."*
+
+[![Node.js Conformance](https://img.shields.io/badge/VUA-100%25%20PASS-emerald?style=flat-square&logo=node.js)](./docs/01-visao-geral-e-instalacao.md)
+[![RFC 8785 Canonical](https://img.shields.io/badge/RFC%208785-JCS%20Canonical-cyan?style=flat-square)](./docs/01-visao-geral-e-instalacao.md)
+[![Ed25519 Signed](https://img.shields.io/badge/Identity-Ed25519%20Proof%20v1-indigo?style=flat-square)](./docs/01-visao-geral-e-instalacao.md)
+[![Mobile & Terminal](https://img.shields.io/badge/Platform-Termux%20%7C%20Alpine%20%7C%20Android%20%7C%20Linux%20%7C%20Windows-amber?style=flat-square)](./docs/04-termux-e-alpine-proot.md)
+[![Golden Rule Gate](https://img.shields.io/badge/Merge%20Gate-CI%20100%25%20PASS%20%E2%86%92%20mergeability%20OK%20%E2%86%92%20merge-violet?style=flat-square)](./docs/05-adapters-local-vs-github-remoto.md)
+
+</div>
+
+---
 
 > **Tese Normativa de Segurança:**  
 > *"Proof of execution is not proof of safety."*  
 > $$\text{Safety} = \text{Authorization} + \text{Bounded Execution} + \text{Accountability} + \text{Independent Verification} + \text{Identity}$$
 
-O **Vortex** é a implementação de referência da especificação de governança e execução criptográfica para agentes de Inteligência Artificial sobre o **Model Context Protocol (MCP)**. Ele assegura que agentes autônomos e modelos LLM operem sob limites matematicamente verificáveis, com provas de execução assinadas em **Ed25519**, canonicalização determinística **RFC 8785 (JCS)** e governança de recursos **GOS3**.
+O **VUA (Vortex Universal Adapter)** é a especificação e motor de referência para governança, conectores universais multiplataforma e execução criptográfica para agentes de Inteligência Artificial sobre o **Model Context Protocol (MCP)** e Git VCS. Ele assegura que agentes autônomos, ferramentas de build e modelos LLM operem sob limites matematicamente verificáveis, com provas de execução assinadas em **Ed25519**, canonicalização determinística **RFC 8785 (JCS)** e governança de recursos **GOS3**.
+
+---
+
+## 🦔 Conheça o Mascote VUA: O Pangolim de Governança
+
+No espírito das clássicas publicações técnicas **O'Reilly**, o **Pangolim** foi escolhido como mascote do VUA por suas características biológicas e arquiteturais:
+
+- 🛡️ **Escamas de Queratina Entrelaçadas**: Representam as camadas concêntricas de proteção do VUA (Isolamento de Sandbox, Validação de Políticas, Canonicalização RFC 8785 e Assinatura Ed25519).
+- 🔒 **Postura Defensiva Inviolável**: Quando sob ameaça (como ataques adversariais de *FORGE*, *REPLAY*, *ESCALATE*, *ESCAPE* ou *TAMPER*), o pangolim enrola-se numa esfera impenetrável — assim como o VUA barra instantaneamente execuções não-autorizadas emitindo provas de auditoria com `executed: false`.
+- 🌾 **Frugalidade e Eficiência Extrema**: O pangolim prospera nos ambientes mais hostis e com poucos recursos — refletindo a capacidade do VUA de rodar com latência de microssegundos (<370µs) até em smartphones com **Termux**, contêineres **Alpine PRoot** e dispositivos sem GPU dedicada.
+
+---
+
+## 🚀 Novos Recursos: GitHub Seguro, Escrita de PR e Merge no Git
+
+O VUA disponibiliza uma interface amigável e com segurança reforçada para conexão a repositórios do GitHub, seleção de projetos e ciclos completos de entrega contínua:
+
+### 1. Autenticação Amigável e Segura (Zero-Leakage)
+- **Token em Memória Volátil**: O Personal Access Token (PAT) é mantido estritamente na memória da sessão (`sessionGitHubToken`) e **nunca é persistido em arquivos de log, localStorage ou disco**.
+- **Modo Sandbox Demo**: Permite testar o fluxo com 5 projetos simulados de alta fidelidade sem necessidade de fornecer token real.
+- **Alternância de Visibilidade**: Campo de token protegido com botão para exibir/ocultar credenciais.
+
+### 2. Seleção de Projetos e Repositórios
+- Exploração visual de repositórios públicos, privados e governados.
+- Filtro em tempo real por proprietário (Owner), organização ou termos de busca.
+- Seleção de branch ativa com exibição de commit SHA, status de proteção de branch e identidade Ed25519 ativa.
+
+### 3. Capacidade de Gerar PR Escrita e Merge no Git
+O VUA implementa o fluxo completo de modificação e governança de código:
+- **Escrever e Criar PR (`create_pr_written`)**: Cria uma Pull Request com título, corpo estruturado em Markdown, checklist de conformidade GOS3 e digest de patch canônico RFC 8785.
+- **Gravar Commit em Branch (`write_branch_commit`)**: Escreve arquivos diretamente numa branch Git com mensagem de commit descritiva, cálculo de digest SHA-256 e atestação de autoria por assinatura Ed25519.
+- **Executar Merge Governado (`merge_pr`)**: Realiza o merge seguro de Pull Requests (Squash, Merge ou Rebase) sob a estrita **Regra de Ouro da Governança**:
+  $$\text{CI 100\% PASS} \longrightarrow \text{mergeability OK} \longrightarrow \text{merge}$$
+  Se houver qualquer portão de qualidade ou workflow de CI pendente sem prova criptográfica, o merge é bloqueado e a tentativa é registrada para auditoria.
 
 ---
 
 ## 📚 Guias Passo a Passo na Pasta `docs/`
 
-Para guias detalhados de instalação, execução mobile e integração:
+Documentação completa e estruturada disponível no repositório:
 
-- 📖 [**docs/README.md**](./docs/README.md) — Índice mestre da documentação.
-- 📦 [**docs/01-visao-geral-e-instalacao.md**](./docs/01-visao-geral-e-instalacao.md) — CLI `vua`, biblioteca npm, diagnósticos de sistema.
-- 📱 [**docs/02-mobile-apk-sem-github.md**](./docs/02-mobile-apk-sem-github.md) — **Passo a passo detalhado para o Passo 2**: APK Android (`com.vortex.foundation.vua`), isolamento SELinux/Scoped Storage, execução sem dependência do GitHub via Capacitor ou Termux.
-- 🤖 [**docs/03-llm-browser-e-qwen-gemini.md**](./docs/03-llm-browser-e-qwen-gemini.md) — **Passo a passo detalhado para o Passo 3**: LLM no browser (WebGPU/Wasm), Qwen 2.5 Coder 0.5B local/offline e Google Gemini com API Key segura e prova Ed25519.
+- 📖 [**docs/README.md**](./docs/README.md) — Índice mestre e arquitetura geral.
+- 📦 [**docs/01-visao-geral-e-instalacao.md**](./docs/01-visao-geral-e-instalacao.md) — Instalação, CLI `vua`, biblioteca npm e diagnósticos.
+- 📱 [**docs/02-mobile-apk-sem-github.md**](./docs/02-mobile-apk-sem-github.md) — **Passo 2**: APK Android (`com.vortex.foundation.vua`), isolamento SELinux/Scoped Storage, funcionamento mobile offline sem conector GitHub.
+- 🤖 [**docs/03-llm-browser-e-qwen-gemini.md**](./docs/03-llm-browser-e-qwen-gemini.md) — **Passo 3**: LLM no navegador (WebGPU/Wasm), Qwen 2.5 Coder 0.5B local/offline e Google Gemini com API Key protegida.
 - ⚡ [**docs/04-termux-e-alpine-proot.md**](./docs/04-termux-e-alpine-proot.md) — Execução em Termux, Alpine Linux (PRoot), benchmarks de latência (<370µs) e throughput (2.700+ ops/seg).
-- 🔌 [**docs/05-adapters-local-vs-github-remoto.md**](./docs/05-adapters-local-vs-github-remoto.md) — GitHub App Remota vs. Adaptadores para múltiplos apps locais (Linux, Android, Windows, MCP para Cursor/Claude/VSCode).
+- 🔌 [**docs/05-adapters-local-vs-github-remoto.md**](./docs/05-adapters-local-vs-github-remoto.md) — Comparativo GitHub App Remota vs. Adaptadores locais (Linux, Android, Windows, MCP para Cursor/Claude/VSCode).
 
 ---
 
-## 📑 Sumário
+## 💻 Primeiros Passos no Terminal / Alpine / Termux
 
-1. [Manual do Usuário & Consumidor LLM](#1-manual-do-usuário--consumidor-llm)
-2. [Manual do Desenvolvedor & Operador](#2-manual-do-desenvolvedor--operador)
-3. [Entregáveis & Diferenciais Competitivos](#3-entregáveis--diferenciais-competitivos)
-4. [Workflow no CI & Portões de Qualidade (100%)](#4-workflow-no-ci--portões-de-qualidade-100)
-5. [Arquivos de Cabeçalho GOS3 Verificáveis](#5-arquivos-de-cabeçalho-gos3-verificáveis)
-6. [Matriz de Conformidade Adversarial](#6-matriz-de-conformidade-adversarial)
+Ao clonar o projeto ou entrar na pasta `vua`:
+
+```bash
+# 1. Instalar dependências
+npm install
+
+# 2. Compilar aplicação
+npm run build
+
+# 3. Executar o CLI VUA
+node bin/vua.js status
+
+# 4. Rodar benchmark de desempenho e latência criptográfica
+node bin/vua.js bench --iterations 500
+
+# 5. Listar todos os adaptadores registrados (GitHub, Linux, Android, Windows)
+node bin/vua.js adapters
+
+# 6. Invocar ação normatizada em adaptador
+node bin/vua.js invoke github inspect_repo
+node bin/vua.js invoke android check_selinux
+node bin/vua.js invoke linux check_sandbox
+
+# 7. Executar LLM com governança (Ollama local ou Gemini)
+node bin/vua.js llm --provider ollama --model qwen2.5-coder:0.5b --prompt "console.log('VUA')"
+node bin/vua.js llm --provider gemini --model gemini-3.8-flash --prompt "Explique VUA em uma frase"
+
+# 8. Rodar suíte de conformidade de adaptadores (100% PASS)
+node bin/vua.js conformance
+
+# 9. Iniciar servidor de desenvolvimento com a interface visual completa
+npm run dev
+```
 
 ---
 
-## 1. Manual do Usuário & Consumidor LLM
+## 🏛️ As 4 Camadas de Adaptadores Universais VUA
 
-O Vortex pode ser consumido diretamente por agentes através do protocolo **MCP (JSON-RPC 2.0)** ou visualizado por operadores humanos através do **Interactive Governance Workbench**.
+| Adaptador | Ambiente | Capacidades Principais |
+| :--- | :--- | :--- |
+| **GitHub Universal Adapter** | Nuvem VCS | Inspeção de repo, verificação de commit, propostas de PR escritas, gravação de branch commits e merge governado. |
+| **Linux POSIX Adapter** | Alpine / Debian / RHEL | Namespaces de processos (`cgroups v2`), isolamento `chroot`/`unshare`, verificação de limites de memória e tempo. |
+| **Android AOSP Adapter** | Termux / Mobile APK | Auditoria de SELinux (`Enforcing`), Scoped Storage, permissões de IPC e isolamento por UID de aplicativo. |
+| **Windows NT Adapter** | Windows / Server | Integridade de tokens de segurança Win32, AppContainer sandboxing e NTFS DACLs/SACLs. |
 
-### 1.1. As 5 Ferramentas Governadas (Normativas)
+---
 
-Todo agente conectado ao endpoint `POST /mcp` tem acesso a 5 ferramentas fundamentais:
+## 📑 Manual do Usuário & Consumidor MCP
+
+Todo agente de IA conectado ao endpoint `POST /mcp` pode interagir através das 5 ferramentas normativas:
 
 | Ferramenta MCP | Efeito Colateral | Descrição |
 | :--- | :--- | :--- |
-| `vortex.inspect` | `false` | Inspeção segura e observacional de recursos com emissão de prova. |
-| `vortex.propose` | `false` | Geração de propostas de código, patches ou diffs sem aplicação física. |
-| `vortex.verify` | `false` | Verificação independente de assinaturas Ed25519 e hashes SHA-256. |
-| `vortex.execute` | `true` | Execução delimitada dentro da sandbox e com sessão ativa GOS3. |
-| `vortex.branch.write` | `true` | Escrita persistente em branches; exige aprovação humana e política explícita. |
+| `vortex.inspect` | `false` | Inspeção observacional segura com emissão de prova. |
+| `vortex.propose` | `false` | Geração de propostas de código, patches e PRs com hash canônico RFC 8785. |
+| `vortex.verify` | `false` | Verificação independente de assinaturas Ed25519 e digests SHA-256. |
+| `vortex.execute` | `true` | Execução delimitada em sandbox sob contrato GOS3 ativo. |
+| `vortex.branch.write` | `true` | Escrita persistente e merge em branches com aprovação explícita. |
 
-### 1.2. Exemplo de Chamada MCP (JSON-RPC 2.0)
+### Exemplo de Chamada MCP (JSON-RPC 2.0)
 
 ```bash
 curl -X POST http://localhost:3000/mcp \
@@ -61,227 +148,29 @@ curl -X POST http://localhost:3000/mcp \
       "name": "vortex.inspect",
       "arguments": {
         "request_id": "req-inspect-101",
-        "target": { "repository": "scoobiii/vortex", "path": "src/main.ts" },
+        "target": { "repository": "vortex-foundation/vua-connector", "path": "src/governance.json" },
         "input": { "verbose": true }
       }
     }
   }'
 ```
 
-### 1.3. Entendendo a Prova de Execução (`ExecutionProof v1`)
-
-Toda chamada gera uma prova criptográfica não-repudiável:
-
-```json
-{
-  "proof_version": "1",
-  "request_id": "req-inspect-101",
-  "execution_id": "exec-1741452000-abc123",
-  "runtime_id": "vortex-node-runtime-v1",
-  "agent_id": "agent/llm-vortex",
-  "principal_id": "scoobiii",
-  "connector_id": "connector-filesystem-v1",
-  "operation": "inspect",
-  "executed": true,
-  "status": "EXECUTION_SUCCESS",
-  "input_hash": "sha256:d800dd8b4f177fc634beff6fe193e...",
-  "output_hash": "sha256:24809582b25160572ce1d140cd09...",
-  "started_at": "2026-09-08T16:40:00.000Z",
-  "completed_at": "2026-09-08T16:40:00.005Z",
-  "duration_ms": 5,
-  "policy_id": "vortex-development",
-  "policy_version": "1.0.0",
-  "gos3_session_id": "gos3-sess-1741452000-xyz",
-  "sandbox_id": "sandbox-fs-1741452000",
-  "identity": {
-    "key_id": "vortex-ed25519-primary",
-    "algorithm": "Ed25519",
-    "signature": "c2lnbmF0dXJlLWJhc2U2NC1lZDI1NTE5..."
-  }
-}
-```
-
-> ⚠️ **Semântica de Falha Honesta:**  
-> Se uma operação for barrada por política (`POLICY_DENIED`) ou tentativa de escape da sandbox (`SANDBOX_DENIED`), a prova é **emitida com `executed = false`**. O Vortex nunca oculta rejeições de segurança.
-
 ---
 
-## 2. Manual do Desenvolvedor & Operador
-
-### 2.1. Como Executar Localmente
-
-```bash
-# 1. Instalar dependências
-npm install
-
-# 2. Executar em modo de desenvolvimento (servidor Node 22 + interface Vite)
-npm run dev
-
-# 3. Executar a suíte completa de testes e conformidade (100% de cobertura)
-npm test
-
-# 4. Verificar os cabeçalhos de contrato GOS3
-npm run verify:gos3
-
-# 5. Compilar para produção
-npm run build && npm start
-```
-
-### 2.2. Arquitetura Modular (`/src/vortex`)
-
-- **`canonicalize.ts`**: Implementação pura do RFC 8785 (JSON Canonicalization Scheme - JCS) com ordenação de chaves em unidades de código UTF-16.
-- **`crypto.ts`**: Primitivas criptográficas nativas Node 22 (`node:crypto` Ed25519 e SHA-256).
-- **`gateway.ts`**: O pipeline de execução em 8 etapas estritas:
-  $$\text{REQUEST} \to \text{IDENTITY} \to \text{AUTHORIZATION} \to \text{LIMITS} \to \text{ONBOARD} \to \text{EXECUTION} \to \text{PROOF} \to \text{VERIFICATION}$$
-- **`mcp-server.ts`**: Roteador compatível com a especificação Model Context Protocol.
-- **`gos3.ts`**: Motor de onboarding de recursos e governança de sessões efêmeras.
-- **`sandbox.ts`**: Verificador de limites de filesystem (resolução de caminhos canônicos, bloqueio de `../`, bytes nulos e prefixos irmãos).
-- **`policy.ts`**: Motor de avaliação de políticas e checagem de aprovação humana.
-- **`verifier.ts`**: Verificador independente que audita 10 invariantes sem confiar no executor.
-- **`evidence.ts`**: Motor de benchmark e cálculo do hash canônico de evidência para CI.
-- **`conformance.ts`**: Suíte de 10 testes E2E e 5 cenários adversariais.
-
-### 2.3. Endpoints REST da API
-
-| Método | Rota | Descrição |
-| :--- | :--- | :--- |
-| `POST` | `/mcp` | Protocolo MCP oficial (JSON-RPC 2.0). |
-| `GET` | `/.well-known/vortex-keys` | Descoberta pública de chaves ativas (RFC 5785). |
-| `POST` | `/api/vortex/execute` | Invocação direta do pipeline do Gateway. |
-| `POST` | `/api/vortex/verify` | Auditoria de prova pelo Verificador Independente. |
-| `GET` | `/api/vortex/evidence` | Evidence Hash canônico e métricas de benchmark. |
-| `POST` | `/api/vortex/conformance` | Execução da suíte adversarial sob demanda. |
-| `POST` | `/api/vortex/gos3/session` | Criação de sessões autorizadas de onboarding GOS3. |
-
----
-
-## 3. Entregáveis & Diferenciais Competitivos
-
-### 3.1. Tabela Comparativa de Entregáveis
-
-| Funcionalidade / Invariante | Agente Convencional | Frameworks de "Guardrail" | Vortex MCP + Gateway |
-| :--- | :---: | :---: | :---: |
-| **Garantia de Identidade** | Baseada em prompt / token fraco | API Keys / Bearer Token | **Criptografia Ed25519 por operação** |
-| **Determinismo de Assinatura** | Não aplicável | Inconsistente (JSON comum) | **RFC 8785 (JCS determinístico)** |
-| **Auditabilidade de Falhas** | Silenciosa / logs comuns | Registrada em log interno | **Prova assinada com `executed=false`** |
-| **Verificação Independente** | Inexistente | Caixa-preta do provedor | **Auditoria de confiança zero (10 invariantes)** |
-| **Defesa contra Path Traversal** | Relativa / regex básica | Filtros de texto | **Isolamento de raiz e prefixo irmão** |
-| **Proteção Anti-Replay** | Inexistente | Rara / por janela de tempo | **Cache de nonce temporal imutável** |
-| **Governança de Recursos** | Acesso livre se tiver path | Baseada em permissão estática | **GOS3: Onboarding prévio obrigatório** |
-| **Evidência no CI** | Apenas logs do runner | Relatórios JUnit | **Hash Canônico SHA-256 de Evidência** |
-
-### 3.2. Principais Diferenciais Técnicos
-
-1. **Assinatura Criptográfica Ed25519 & RFC 8785:** A assinatura é calculada sobre a representação canônica exata do payload, garantindo interoperabilidade entre diferentes linguagens (Node, Go, Rust, Python).
-2. **Verificador Independente de Confiança Zero:** O verificador recancula todos os hashes a partir dos dados de entrada e saída, checa o tempo de vida, o nonce e a assinatura sem aceitar qualquer alegação do executor.
-3. **Isolamento de Sandbox à Prova de Sibling Prefix:** Impede que um caminho como `/workspace/vortex` seja burlado acessando `/workspace/vortex-evil`.
-
----
-
-## 4. Workflow no CI & Portões de Qualidade (100%)
-
-O pipeline do GitHub Actions (`.github/workflows/vortex-ci.yml`) implementa um portão rigoroso onde **nenhum merge é permitido sem 100% de conformidade**.
-
-### 📋 Checklist de Qualidade do CI:
-
-- [x] **100% de Cobertura de Código e Contratos**
-- [x] **Testes Unitários:**
-  - Canonicalização determinística RFC 8785 (ordenação UTF-16 code units, escape sequences).
-  - Assinatura e validação Ed25519 nativa.
-  - Hashing padronizado SHA-256 com prefixo `sha256:`.
-  - Motor de políticas (autorização de leitura, bloqueio de escrita em main, tokens de aprovação).
-  - Isolamento de caminhos da sandbox (`../`, bytes nulos e prefixos irmãos).
-- [x] **Testes de Integração (10/10 Foundation E2E):**
-  - E2E-001 até E2E-010 cobrindo fluxo completo MCP $\to$ Gateway $\to$ Sandbox $\to$ Prova $\to$ Verificador.
-- [x] **Testes Adversariais:**
-  - 5 cenários negativos validados (`FORGE`, `REPLAY`, `ESCALATE`, `ESCAPE`, `TAMPER`).
-- [x] **Testes de Stress & Concorrência:**
-  - 100 invocações paralelas concorrentes simultâneas sem colisões de nonces ou vazamento de estado.
-- [x] **Testes de Performance & Benchmark:**
-  - Medição de RPS, p50, p95 e p99 comparados contra a Baseline Normativa (Composite Score $\ge$ Baseline).
-- [x] **Testes de Degradação:**
-  - Resiliência sob payloads gigantes (5MB+), contenção de limites de memória e thresholds de timeout (1ms).
-- [x] **Testes de Caos:**
-  - Injeção de chaves corrompidas, sessões revogadas e integridade sob falhas estruturais.
-- [x] **Auditoria de Cabeçalhos GOS3:**
-  - Verificação rigorosa de integridade de checksum de todos os arquivos governados.
-
----
-
-## 5. Arquivos de Cabeçalho GOS3 Verificáveis
-
-A especificação **GOS3 (§8)** define que nenhum recurso crítico pode ser modificado por um agente sem onboarding prévio e um contrato rastreável.
-
-### 5.1. Formato do Cabeçalho GOS3
-
-Os arquivos governados carregam o bloco de contrato `@gos3-contract` no topo:
-
-```typescript
-/**
- * @gos3-contract
- * @version 1.0.0
- * @resource /src/governed/governed-vault.ts
- * @checksum sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5
- * @capability repository.write
- * @onboarded_at 2026-09-08T09:48:00.000Z
- * @governed true
- */
-```
-
-### 5.2. Como Funciona a Verificação
-
-O algoritmo de verificação calcula o hash SHA-256 do conteúdo do arquivo **excluindo o próprio bloco de comentário**, comparando-o com o `@checksum` declarado:
-
-1. **Localmente:**
-   ```bash
-   npm run verify:gos3
-   ```
-2. **No CI (GitHub Actions):**
-   O passo `Audit GOS3 Contract Headers` roda `npx tsx scripts/verify-gos3-headers.ts --strict`. Se qualquer arquivo tiver sido adulterado sem autorização ou tiver hash incorreto, o pipeline falha imediatamente com código 1.
-
----
-
-## 6. Matriz de Conformidade Adversarial
+## 🛡️ Matriz de Conformidade Adversarial (5/5 PASS)
 
 A suíte adversarial testa ativamente as 5 violações de segurança fundamentais:
 
-| Cenário | Ataque Simulado | Status Esperado | Ação Defensiva do Vortex |
+| Cenário | Ataque Simulado | Status Esperado | Ação Defensiva do VUA |
 | :--- | :--- | :--- | :--- |
 | **FORGE** | Modificação de `output_hash` ou flag `executed` na prova. | `SIGNATURE_INVALID` | Rejeição imediata pela chave pública Ed25519. |
 | **REPLAY** | Reenvio do mesmo `request_id` com payload idêntico. | `REPLAY_REJECTED` | O cache de anti-replay bloqueia a reexecução. |
-| **ESCALATE** | Tentativa de escrita persistente com política somente-leitura. | `POLICY_DENIED` | Prova é emitida com `executed = false`. |
+| **ESCALATE** | Tentativa de escrita ou merge sem autorização da política. | `POLICY_DENIED` | Prova é emitida com `executed = false`. |
 | **ESCAPE** | Ataque de path traversal (`../../etc/passwd`) ou prefixo irmão. | `SANDBOX_DENIED` | A sandbox isola o caminho antes de invocar o conector. |
 | **TAMPER** | Adulteração do artefato físico após a execução ser concluída. | `HASH_MISMATCH` | O verificador detecta a discrepância no hash SHA-256. |
 
 ---
 
-## 7. Evidência de Execução Canônica (CI Provenance)
+## 📜 Licença & Governança
 
-Cada execução da suíte completa produz o objeto de evidência canônico:
-
-```json
-{
-  "schema": "vortex-execution-evidence/v1",
-  "module": "foundation-integration",
-  "commit_sha": "856920785b8392b036211cc851e1f6467961ff52",
-  "ci": {
-    "provider": "github-actions",
-    "run_id": "34228487367",
-    "run_attempt": "1",
-    "workflow": "vortex-foundation-ci.yml"
-  },
-  "result": {
-    "build": "PASS",
-    "tests": "PASS",
-    "coverage": "100%",
-    "integration": "PASS",
-    "security": "PASS",
-    "stress": "PASS",
-    "performance": "PASS",
-    "degradation": "PASS"
-  },
-  "canonical_hash": "sha256:b3a6ebbdf9b4561edfc27077da9070fde367ab6ced4c9a3d958ff69539ee20cb"
-}
-```
-
-Disponível em tempo de execução via `GET /api/vortex/evidence`.
+Especificação aberta e código sob licença MIT. Desenvolvido pela **Vortex Open Protocol Foundation** para assegurar segurança, transparência e reprodutibilidade matemática em sistemas com agentes autônomos.

@@ -16,6 +16,7 @@
 
 import { canonicalize } from './canonicalize.js';
 import { resolvePublicKey, sha256, verifyProofSignature } from './crypto.js';
+import { validateGOS3Session } from './gos3.js';
 import type { ExecutionProof, VerificationResult } from './types.js';
 
 export function verifyExecutionProof(
@@ -132,15 +133,37 @@ export function verifyExecutionProof(
     checks.policy = { passed: false, message: 'Temporal inconsistency: completed_at occurs before started_at' };
     reasons.push('Temporal timestamp ordering violation');
   } else {
-    checks.policy = { passed: true, message: `Temporal ordering valid: duration was ${proof.duration_ms}ms` };
+    const calculatedDuration = completed - started;
+    const drift = Math.abs(calculatedDuration - proof.duration_ms);
+    if (drift > 1000) {
+      checks.policy = {
+        passed: false,
+        message: `Temporal duration divergence: proof duration_ms (${proof.duration_ms}ms) diverges from completed_at - started_at (${calculatedDuration}ms)`,
+      };
+      reasons.push(`Temporal duration divergence detected (${drift}ms drift)`);
+    } else {
+      checks.policy = { passed: true, message: `Temporal ordering valid: duration was ${proof.duration_ms}ms` };
+    }
   }
 
   // 7. GOS3 Session Consistency
-  if (proof.operation === 'branch.write' && !proof.gos3_session_id && proof.executed) {
-    checks.session = { passed: false, message: 'Executed mutable branch.write requires GOS3 session' };
-    reasons.push('GOS3 session violation on mutable operation');
+  if (proof.executed && (!proof.gos3_session_id || proof.gos3_session_id.trim() === '')) {
+    checks.session = { passed: false, message: 'Executed governed operation missing required GOS3 session ID (empty string detected)' };
+    reasons.push('Empty or missing GOS3 session ID on executed proof');
+  } else if (proof.gos3_session_id) {
+    const sessionCheck = validateGOS3Session(proof.gos3_session_id);
+    if (!sessionCheck.valid) {
+      checks.session = { passed: false, message: `GOS3 session '${proof.gos3_session_id}' invalid: ${sessionCheck.error || 'expired or not found'}` };
+      reasons.push(`Invalid GOS3 session: ${sessionCheck.error || 'not found'}`);
+    } else {
+      checks.session = {
+        passed: true,
+        message: `GOS3 session '${proof.gos3_session_id}' verified active and valid`,
+        details: { session_id: proof.gos3_session_id, resource: sessionCheck.session?.resource },
+      };
+    }
   } else {
-    checks.session = { passed: true, message: 'GOS3 session integrity verified' };
+    checks.session = { passed: true, message: 'GOS3 session not required for unexecuted or rejected operation' };
   }
 
   // 8. Anti-Replay Integrity

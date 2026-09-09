@@ -120,3 +120,28 @@ export function revokeGOS3Session(sessionId: string): boolean {
 export function listActiveSessions(): GOS3Session[] {
   return Array.from(ACTIVE_SESSIONS.values());
 }
+
+/**
+ * Gets an existing active GOS3 session for principal+agent+resource, or creates a new one
+ */
+export function getOrCreateGOS3Session(
+  principal_id = 'scoobiii',
+  agent_id = 'agent/vortex',
+  resourcePath = 'vua://default-governed-resource',
+  durationSeconds = 600
+): GOS3Session {
+  const now = Date.now();
+  for (const session of ACTIVE_SESSIONS.values()) {
+    if (
+      session.principal_id === principal_id &&
+      session.agent_id === agent_id &&
+      session.status === 'ACTIVE' &&
+      new Date(session.expires_at).getTime() > now &&
+      (!resourcePath || session.resource === resourcePath || resourcePath.startsWith(session.resource))
+    ) {
+      return session;
+    }
+  }
+
+  return createGOS3Session(principal_id, agent_id, resourcePath, durationSeconds);
+}

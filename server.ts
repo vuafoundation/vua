@@ -651,6 +651,36 @@ async function startServer() {
     res.json({ active_target: activeGitHubTarget });
   });
 
+  app.post('/api/github/action', async (req, res) => {
+    try {
+      const { action, payload = {} } = req.body;
+      if (!action) {
+        return res.status(400).json({ error: 'Campo "action" é obrigatório.' });
+      }
+
+      const effectivePayload = {
+        token: sessionGitHubToken || process.env.GITHUB_TOKEN,
+        ...payload,
+      };
+
+      const result = await vuaRegistry.invoke({
+        adapterId: 'github',
+        action,
+        target: {
+          owner: activeGitHubTarget.owner,
+          repo: activeGitHubTarget.repo,
+          branch: activeGitHubTarget.branch,
+          commit_sha: activeGitHubTarget.commit_sha,
+        },
+        payload: effectivePayload,
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || String(err) });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

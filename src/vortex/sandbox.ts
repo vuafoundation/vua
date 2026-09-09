@@ -52,17 +52,22 @@ export function validateFilesystemScope(
     };
   }
 
-  // Resolve to absolute path representation
+  // Resolve to absolute path representation while preserving containment check
   const normalized = path.normalize(targetPath);
+  const resolved = path.isAbsolute(targetPath) ? normalized : path.resolve(process.cwd(), targetPath);
 
   // 2. Check against allowed roots with strict delimiter protection
   const isContained = allowedRoots.some((root) => {
     const normRoot = path.normalize(root);
+    const resolvedRoot = path.isAbsolute(root) ? normRoot : path.resolve(process.cwd(), root);
+
     // Ensure trailing slash check to prevent sibling prefix bypass:
     // e.g., root '/var/app' must NOT match '/var/app_secret'
-    if (normalized === normRoot) return true;
+    if (normalized === normRoot || resolved === resolvedRoot) return true;
     const rootWithSep = normRoot.endsWith(path.sep) ? normRoot : normRoot + path.sep;
-    return normalized.startsWith(rootWithSep);
+    const resolvedRootWithSep = resolvedRoot.endsWith(path.sep) ? resolvedRoot : resolvedRoot + path.sep;
+
+    return normalized.startsWith(rootWithSep) || resolved.startsWith(resolvedRootWithSep);
   });
 
   if (!isContained) {
