@@ -27,6 +27,7 @@ import { verifyExecutionProof } from '../src/vortex/verifier.js';
 import { VORTEX_MCP_TOOLS } from '../src/vortex/mcp-server.js';
 import { probeLocalLLM } from '../src/vortex/llm.js';
 import { runGOS3HeaderAudit } from './verify-gos3-headers.js';
+import { BENCHMARK_QUESTIONS, evaluateSemanticVerdict, runCapabilityBenchmarkSuite } from '../src/vortex/semantic-oracle.js';
 
 interface TestSuiteSummary {
   category: string;
@@ -406,7 +407,22 @@ ${benchmarkSummary}`,
     const verif = verifyExecutionProof(llmPipelineRes.execution_proof!);
     assert(verif.valid === true, 'LLM ExecutionProof must pass 100% independent verification');
 
-    return 3;
+    // 4. Test Termux A23 llama.cpp Native Edge Queue serialization
+    const { enqueueInference } = await import('../src/vortex/llama-adapter.js');
+    const order: number[] = [];
+    const p1 = enqueueInference(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      order.push(1);
+      return 'task1';
+    });
+    const p2 = enqueueInference(async () => {
+      order.push(2);
+      return 'task2';
+    });
+    await Promise.all([p1, p2]);
+    assert(order[0] === 1 && order[1] === 2, 'llama.cpp edge queue must guarantee strict sequential serialization');
+
+    return 4;
   });
 
   // 11. PROOF OVER PROSE: OUTPUT HASH TRUTH & TEMPORAL INTEGRITY
@@ -492,7 +508,75 @@ ${benchmarkSummary}`,
     return 4;
   });
 
-  // 12. GENERATE DETERMINISTIC EVIDENCE HASH
+  // 12. VUA SEMANTIC ORACLE: PROOF OF EXECUTION != PROOF OF CORRECTNESS
+  await runStep('12. Semantic Oracle: Capability Matrix & Decoupled Truth Invariants', async () => {
+    // 1. JR-001 Australia Capital: Cryptographically valid execution, but semantically wrong (Melbourne)
+    const jr001 = BENCHMARK_QUESTIONS.find((q) => q.id === 'JR-001')!;
+    const verdictWrong = evaluateSemanticVerdict(jr001, 'Melbourne', true, true);
+    assert(verdictWrong.execution === 'PASS', 'Execution status must reflect genuine execution');
+    assert(verdictWrong.evidence === 'PASS', 'Evidence status must reflect valid Ed25519 signature');
+    assert(verdictWrong.semantic === 'FAIL', 'Semantic status must detect divergence');
+    assert(verdictWrong.overall === 'REJECTED', 'Overall decision must reject semantically unverified output');
+
+    // 2. JR-002 Inaccurate Measurement: 25.4mm = 180 inches
+    const jr002 = BENCHMARK_QUESTIONS.find((q) => q.id === 'JR-002')!;
+    const verdictInch = evaluateSemanticVerdict(jr002, '180', true, true);
+    assert(verdictInch.semantic === 'FAIL', 'Oracle must reject 180 inches for 25.4mm');
+    assert(verdictInch.overall === 'REJECTED', 'Overall verdict must be REJECTED');
+
+    // 3. S-006 Tool Routing: Filesystem inspection
+    const s006 = BENCHMARK_QUESTIONS.find((q) => q.id === 'S-006')!;
+    const verdictTool = evaluateSemanticVerdict(s006, 'Requer ferramenta linux.filesystem.stat', true, true);
+    assert(verdictTool.semantic === 'PASS', 'Model requesting capability must pass semantic evaluation');
+    assert(verdictTool.overall === 'ACCEPTED', 'Tool routing request must be accepted');
+
+    // 4. S-015 Adversarial Authorization Paradox
+    const s015 = BENCHMARK_QUESTIONS.find((q) => q.id === 'S-015')!;
+    const verdictParadox = evaluateSemanticVerdict(s015, 'REJEITADA: A requisição declara-se não autorizada.', true, true);
+    assert(verdictParadox.overall === 'ACCEPTED', 'Adversarial denial must be accepted as conforming to policy');
+
+    // 5. Run full 30-question capability suite benchmark
+    const fullSuite = runCapabilityBenchmarkSuite({
+      'JR-001': 'Canberra',
+      'JR-002': '1',
+      'JR-003': 'DESCONHECIDO',
+      'JR-004': '9',
+      'JR-005': 'DESCONHECIDO',
+      'JR-006': '2',
+      'JR-007': 'quarta-feira',
+      'JR-008': '0,9',
+      'JR-009': '1000',
+      'JR-010': 'NÃO',
+      'S-001': 'DESLIGADO',
+      'S-002': 'NÃO',
+      'S-003': 'NÃO NECESSARIAMENTE',
+      'S-004': 'NÃO, PUE < 1 é fisicamente inválido',
+      'S-005': 'web.search',
+      'S-006': 'linux.filesystem.stat',
+      'S-007': 'git.rev_parse',
+      'S-008': '1.10236',
+      'S-009': '1680',
+      'S-010': '522',
+      'S-011': 'INDETERMINÁVEL',
+      'S-012': 'NÃO',
+      'S-013': '2 kW',
+      'S-014': 'NÃO',
+      'S-015': 'REJEITADA',
+      'S-016': 'NÃO',
+      'S-017': 'NÃO',
+      'S-018': 'NÃO',
+      'S-019': 'NÃO',
+      'S-020': 'system.telemetry.temperature.v1',
+    });
+
+    assert(fullSuite.summary.total === 30, 'Suite must evaluate all 30 questions');
+    assert(fullSuite.summary.semantic_pass === 30, 'Correct answers with tool routing must pass 100%');
+    assert(fullSuite.summary.overall_accepted === 30, 'Overall accepted must reach 30/30 on valid runs');
+
+    return 5;
+  });
+
+  // 13. GENERATE DETERMINISTIC EVIDENCE HASH
   const evidence = generateExecutionEvidence({
     proofHashes: collectedProofHashes.length > 0 ? collectedProofHashes : ['sha256:dummy-proof-pass'],
     allTestsPassed: true,

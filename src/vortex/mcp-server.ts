@@ -143,8 +143,8 @@ export const VORTEX_MCP_TOOLS: MCPToolDefinition[] = [
         prompt: { type: 'string', description: 'User prompt or task for the model' },
         provider: {
           type: 'string',
-          enum: ['gemini', 'openai', 'ollama', 'lmstudio', 'custom'],
-          description: 'LLM Provider type (gemini, openai, ollama, lmstudio)',
+          enum: ['gemini', 'openai', 'ollama', 'lmstudio', 'llamacpp', 'custom'],
+          description: 'LLM Provider type (gemini, openai, ollama, lmstudio, llamacpp native edge)',
         },
         model: { type: 'string', description: 'Model identifier (e.g. gemini-3.8-flash, llama3, gpt-4o-mini)' },
         baseUrl: { type: 'string', description: 'Optional custom endpoint (e.g. http://localhost:11434 for Ollama)' },

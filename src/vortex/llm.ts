@@ -18,9 +18,10 @@ import { GoogleGenAI } from '@google/genai';
 import { executeVortexPipeline } from './gateway.js';
 import { getOrCreateGOS3Session } from './gos3.js';
 import { verifyExecutionProof } from './verifier.js';
+import { invokeLlama } from './llama-adapter.js';
 import type { ExecutionProof, VerificationResult, VortexRequest } from './types.js';
 
-export type LLMProviderType = 'gemini' | 'openai' | 'ollama' | 'lmstudio' | 'custom';
+export type LLMProviderType = 'gemini' | 'openai' | 'ollama' | 'lmstudio' | 'llamacpp' | 'custom';
 
 export interface LLMConfig {
   provider: LLMProviderType;
@@ -352,6 +353,19 @@ export async function executeGovernedLLM(
       rawResult = await callGemini(prompt, config);
     } else if (config.provider === 'ollama') {
       rawResult = await callOllama(prompt, config);
+    } else if (config.provider === 'llamacpp') {
+      const llamaRes = await invokeLlama({
+        prompt,
+        model: config.model || 'qwen',
+        max_tokens: config.maxTokens || 128,
+        temperature: config.temperature ?? 0,
+        timeout_ms: config.timeoutMs || 120_000,
+        baseUrl: config.baseUrl,
+      });
+      rawResult = {
+        text: llamaRes.text,
+        usage: llamaRes.usage,
+      };
     } else {
       rawResult = await callOpenAICompatible(prompt, config);
     }

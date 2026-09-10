@@ -22,7 +22,7 @@ interface LLMGatewayViewProps {
 }
 
 export const LLMGatewayView: React.FC<LLMGatewayViewProps> = ({ onSendToVerifier }) => {
-  const [provider, setProvider] = useState<'gemini' | 'openai' | 'ollama' | 'lmstudio'>('gemini');
+  const [provider, setProvider] = useState<'gemini' | 'openai' | 'ollama' | 'lmstudio' | 'llamacpp'>('gemini');
   const [model, setModel] = useState<string>('gemini-3.8-flash');
   const [baseUrl, setBaseUrl] = useState<string>('');
   const [apiKey, setApiKey] = useState<string>('');
@@ -78,6 +78,11 @@ export const LLMGatewayView: React.FC<LLMGatewayViewProps> = ({ onSendToVerifier
       setModel('local-model');
       setBaseUrl('http://localhost:1234/v1');
       handleProbe('lmstudio', 'http://localhost:1234/v1');
+    } else if (provider === 'llamacpp') {
+      setModel('qwen2.5-coder-0.5b');
+      setBaseUrl('http://127.0.0.1:11434');
+      setMaxTokens(128);
+      setTemperature(0);
     }
   }, [provider]);
 
@@ -296,6 +301,30 @@ export const LLMGatewayView: React.FC<LLMGatewayViewProps> = ({ onSendToVerifier
                 </div>
                 <p className="text-[11px] text-zinc-400">LM Studio, vLLM ou servidor compatível local.</p>
               </button>
+
+              {/* llama.cpp Native Edge */}
+              <button
+                type="button"
+                onClick={() => setProvider('llamacpp')}
+                className={`p-3 rounded-lg border text-left transition-all col-span-2 ${
+                  provider === 'llamacpp'
+                    ? 'border-indigo-500 bg-indigo-500/10 text-white shadow-sm'
+                    : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-white">
+                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                    llama.cpp Nativo (Edge / Termux A23 CPU)
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-mono">
+                    C/C++ SIMD + Q4 GGUF
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Inferência quente em binário compilado C/C++, fila serial (concorrência = 1), governada pelo VUA Node.js com provas Ed25519.
+                </p>
+              </button>
             </div>
           </div>
 
@@ -390,7 +419,7 @@ export const LLMGatewayView: React.FC<LLMGatewayViewProps> = ({ onSendToVerifier
             </div>
 
             {/* Base URL (if local or custom) */}
-            {(provider === 'ollama' || provider === 'lmstudio' || provider === 'openai') && (
+            {(provider === 'ollama' || provider === 'lmstudio' || provider === 'llamacpp' || provider === 'openai') && (
               <div>
                 <label className="text-xs text-zinc-400 mb-1 block">Endpoint URL (Base)</label>
                 <input
@@ -400,12 +429,19 @@ export const LLMGatewayView: React.FC<LLMGatewayViewProps> = ({ onSendToVerifier
                   placeholder={
                     provider === 'ollama'
                       ? 'http://localhost:11434'
+                      : provider === 'llamacpp'
+                      ? 'http://127.0.0.1:11434'
                       : provider === 'lmstudio'
                       ? 'http://localhost:1234/v1'
                       : 'https://api.openai.com/v1'
                   }
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
+                {provider === 'llamacpp' && (
+                  <p className="text-[11px] text-zinc-400 mt-1">
+                    Aponta para o binário nativo <code className="text-cyan-300">llama-server</code> compilado em C/C++ no Termux/Android.
+                  </p>
+                )}
               </div>
             )}
 

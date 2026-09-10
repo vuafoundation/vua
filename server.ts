@@ -255,6 +255,15 @@ async function startServer() {
           models: ['local-model'],
           description: 'Local OpenAI-compatible engine on localhost:1234 or vLLM',
         },
+        {
+          id: 'llamacpp',
+          name: 'llama.cpp Native (Termux / Edge CPU)',
+          type: 'local',
+          default_url: 'http://127.0.0.1:11434',
+          default_model: 'qwen2.5-coder-0.5b',
+          models: ['qwen2.5-coder-0.5b', 'qwen2.5-0.5b-instruct', 'llama-3.2-1b'],
+          description: 'C/C++ native SIMD inference on ARM/Termux (A23 CPU constraint: serial queue, Q4_K_M GGUF)',
+        },
       ],
     });
   });

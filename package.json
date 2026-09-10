@@ -17,7 +17,8 @@
     "test": "tsx scripts/run-full-suite.ts",
     "verify:gos3": "tsx scripts/verify-gos3-headers.ts --strict",
     "vua": "tsx bin/vua.js",
-    "bench": "tsx bin/vua.js bench"
+    "bench": "tsx bin/vua.js bench",
+    "bench:semantic": "tsx scripts/run-semantic-benchmark.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
