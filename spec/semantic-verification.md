@@ -1,135 +1,329 @@
-# VUA Semantic Verification & Capability Routing Specification v0.1
+# VUA — Capability Orchestration, Escalation & Semantic Verification Specification v0.2
 
 > Status: draft normative specification
 > Date: 2026-09-09
-> Companion: Vortex Invocation Contract v0.3
+> Companion: Vortex Invocation Contract v0.4
 
 ## 1. Purpose
 
-VUA is the capability-selection and adapter layer between an agent/LLM and governed execution. VUA MUST NOT treat an LLM response as proof of correctness.
+VUA is the universal capability-selection, routing and adapter layer between an agent/LLM and governed execution.
+
+VUA MUST NOT treat an LLM response as proof of correctness. More importantly, VUA MUST NOT model intelligence as a single capability. Mathematics, web search, retrieval, vision, code execution, APIs, planning, memory and domain reasoning are complementary capabilities in an AGI-style system.
 
 The central rule is:
 
 ```text
-LLM inference ≠ deterministic verification
-ExecutionProof ≠ semantic truth
+LLM inference        ≠ truth
+Web search           ≠ truth
+ExecutionProof       ≠ semantic truth
+Capability success   ≠ task success
 ```
 
-When a task class has a deterministic, specialized, schema, test, compiler, or domain-rule verifier, VUA SHOULD route the candidate result through that capability before a higher-level correctness claim is emitted.
+The system SHOULD use the cheapest authorized capability that can establish the required property, and SHOULD escalate when the current capability cannot establish it.
 
-## 2. Architecture
+## 2. Core architecture
 
 ```text
-AGENT / LLM
-     │
-     ▼
- candidate / intent
-     │
-     ▼
- VUA CAPABILITY ROUTER
-     │
-     ├── math / units
-     ├── schema validation
-     ├── OCR
-     ├── object detection
-     ├── metrology
-     ├── compiler / tests
-     └── domain rules
-     │
-     ▼
- VORTEX GATEWAY
-     │
-     ├── identity
-     ├── authorization
-     ├── policy
-     ├── scope
-     └── execution limits
-     │
-     ▼
- ADAPTER / RUNTIME
-     │
-     ▼
- evidence
-     │
-     ▼
- independent verification
+                         REQUEST
+                            │
+                            ▼
+                     VUA INTENT / TASK
+                       CLASSIFIER
+                            │
+                            ▼
+                  CAPABILITY ROUTER
+                            │
+        ┌───────────────────┼────────────────────┐
+        ▼                   ▼                    ▼
+      LLM              external evidence      deterministic
+   inference            Search / API / RAG    / specialized
+        │                   │                    │
+        └───────────────────┼────────────────────┘
+                            ▼
+                     CANDIDATE RESULT
+                            │
+                            ▼
+                    VERIFICATION ROUTER
+                            │
+                 ┌──────────┼──────────┐
+                 ▼          ▼          ▼
+             semantic    evidence   execution
+             verifier    verifier   verifier
+                 │          │          │
+                 └──────────┼──────────┘
+                            ▼
+                       VORTEX GATEWAY
+                            │
+             identity / authorization / policy
+                 scope / limits / audit / proof
+                            │
+                            ▼
+                         RESULT
 ```
 
-## 3. Capability descriptor
+VUA selects and composes capabilities. Vortex governs their execution and proof boundary.
 
-A verifier capability SHOULD expose a descriptor equivalent to:
+## 3. Capability model
+
+A capability is an independently addressable unit of competence or evidence acquisition. Examples include:
+
+- `llm.inference.v1`
+- `retrieval.local.v1`
+- `web.search.v1`
+- `web.fetch.v1`
+- `api.query.v1`
+- `math.solve.v1`
+- `units.convert.v1`
+- `logic.check.v1`
+- `schema.validate.v1`
+- `ocr.extract.v1`
+- `vision.detect.v1`
+- `metrology.measure.v1`
+- `compiler.build.v1`
+- `tests.run.v1`
+- `domain.rule.v1`
+- `human.review.v1`
+
+A capability descriptor SHOULD expose:
 
 ```json
 {
-  "capability_id": "verify.math.v1",
-  "kind": "deterministic",
-  "input_types": ["numeric_expression", "word_problem"],
-  "output_type": "verification_result",
-  "deterministic": true,
+  "capability_id": "web.search.v1",
+  "kind": "external_evidence",
+  "input_types": ["natural_language_query"],
+  "output_type": "search_evidence",
+  "deterministic": false,
+  "probabilistic": false,
   "side_effect": false,
-  "version": "1.0.0",
+  "external_dependency": true,
+  "network_required": true,
+  "cost_class": "low",
   "authority": "vua",
-  "proof_required": true
+  "version": "1.0.0",
+  "proof_required": true,
+  "verification_capabilities": ["verify.web.source.v1"]
 }
 ```
 
-Capabilities MUST declare whether they are deterministic, side-effecting, externally dependent, or probabilistic.
+Capabilities MUST declare whether they are deterministic, probabilistic, side-effecting, externally dependent, network-dependent, and independently verifiable.
 
-## 4. Verification result
+## 4. Intelligence is compositional
+
+VUA MUST NOT assume that a stronger LLM alone dominates a composition of smaller specialized capabilities.
+
+```text
+small LLM
+   + retrieval
+   + web/API
+   + deterministic tools
+   + vision/OCR
+   + domain rules
+   + memory
+   + verification
+   + planning
+        │
+        ▼
+   composite capability
+```
+
+A junior model can outperform a senior model on a bounded task when the junior is connected to the correct authoritative capability and the senior is not.
+
+This is not a claim that the junior model is intrinsically more intelligent. It is a system-level capability advantage.
+
+## 5. Task decomposition and routing
+
+Before execution, VUA SHOULD classify the task along these dimensions:
+
+- knowledge freshness;
+- deterministic vs probabilistic nature;
+- required precision;
+- required external evidence;
+- required modality;
+- side-effect risk;
+- verification availability;
+- latency/cost constraints;
+- offline/online availability.
+
+Examples:
+
+| Task characteristic | Preferred capability |
+|---|---|
+| stable factual knowledge | local knowledge / RAG / LLM |
+| current fact | web search + source extraction |
+| numerical calculation | deterministic math |
+| unit conversion | deterministic units |
+| structured output | schema validator |
+| source code | compiler + tests |
+| image text | OCR |
+| object count/location | vision detection |
+| physical measurement | metrology + deterministic conversion |
+| domain safety | domain rule engine |
+| unavailable proof | escalation or `NOT_PROVABLE` |
+
+Web search MUST be treated as an evidence-acquisition capability, not as a generic intelligence upgrade.
+
+## 6. Escalation / "ask for help" policy
+
+When the current capability cannot establish the required property, VUA MUST NOT silently convert uncertainty into success.
+
+The router SHOULD escalate in this order:
+
+```text
+current capability
+      │
+      ├── sufficient evidence → verify
+      │
+      └── insufficient evidence
+               │
+               ▼
+       cheapest suitable verifier
+               │
+               ├── PASS → accept
+               ├── FAIL → repair/replan
+               └── NOT_PROVABLE
+                       │
+                       ▼
+               next authorized capability
+                       │
+                       ▼
+                stronger model / API /
+                web / specialist / human
+                       │
+                       ▼
+                 NOT_PROVABLE
+```
+
+Escalation MUST be bounded by policy, attempt limits, timeout, cost, network permissions and capability scope.
+
+A model MAY request help, but the model MUST NOT authorize its own unrestricted tool use.
+
+## 7. Confidence is not verification
+
+LLM confidence, self-consistency, fluent explanation, or agreement with a previous answer MUST NOT by itself produce `semantic_verified=true`.
+
+If a task has a suitable deterministic or specialized verifier, VUA SHOULD invoke it regardless of the LLM's confidence when policy requires proof.
+
+## 8. Web search and external APIs
+
+VUA SHOULD invoke `web.search.v1` when the task requires information that is:
+
+- current or time-sensitive;
+- explicitly requested from the web;
+- unavailable in authorized local knowledge/RAG;
+- dependent on an external source;
+- required for source comparison or citation.
+
+VUA SHOULD NOT invoke web search merely to compensate for a deterministic task that can be solved locally.
+
+Example:
+
+```text
+"What is the current MCP specification version?"
+        ↓
+web.search.v1
+        ↓
+source extraction
+        ↓
+source evidence
+        ↓
+LLM synthesis
+        ↓
+verify.web.source.v1
+```
+
+The search result, fetched content, source identifiers and extraction result are evidence objects and MUST be independently hashable.
+
+## 9. Evidence graph and hashes
+
+Different objects MUST have distinct semantic identities. A sandbox hash MUST NOT be presented as the hash of an LLM response.
+
+Recommended evidence graph:
+
+```text
+request
+  │
+  ├── request_hash
+  │
+  ├── sandbox_hash
+  │
+  ├── toolchain_hash
+  │
+  ├── candidate_output_hash
+  │
+  ├── capability_evidence_hash
+  │       ├── search_query_hash
+  │       ├── source_set_hash
+  │       └── extracted_evidence_hash
+  │
+  ├── semantic_check_hash
+  │
+  └── execution_proof_hash
+```
+
+`execution_proof_hash` MAY commit to the complete canonical evidence manifest, but each component hash MUST retain its own meaning.
+
+A repeated sandbox hash across different LLM outputs is not inherently a collision. It is a defect only if the implementation claims that hash represents the output content or uses it as such.
+
+## 10. Verification result
 
 ```json
 {
   "verification_status": "PASS | FAIL | NOT_PROVABLE",
   "semantic_verified": true,
-  "capability_id": "verify.math.v1",
+  "capability_id": "units.convert.v1",
   "check_id": "sha256:...",
   "input_hash": "sha256:...",
-  "output_hash": "sha256:...",
-  "reason": "string",
+  "candidate_hash": "sha256:...",
+  "evidence_hash": "sha256:...",
+  "reason": "25.4 mm / 25.4 = 1 in",
   "deterministic": true
 }
 ```
 
-`PASS` means the declared verifier accepted the candidate under its contract. It does not grant authority beyond the declared capability.
+`PASS` means the declared verifier accepted the candidate under its contract.
 
-`FAIL` means the candidate violated the verifier's contract.
+`FAIL` means the candidate violated that contract.
 
-`NOT_PROVABLE` means no suitable verifier was available or the evidence was insufficient. It MUST NOT be rewritten as `PASS` merely because the LLM was confident.
+`NOT_PROVABLE` means suitable evidence or a suitable verifier is unavailable. It MUST NOT be rewritten as `PASS` because an LLM was confident.
 
-## 5. Routing policy
+## 11. Composite verification
 
-VUA SHOULD classify the task before selecting a verifier:
+Complex tasks MAY require multiple capabilities:
 
-| Task | Preferred verifier |
-|---|---|
-| arithmetic | deterministic math engine |
-| unit conversion | deterministic conversion engine |
-| JSON/API shape | schema validator |
-| source code | compiler + tests |
-| image text | OCR |
-| object location/count | object detection |
-| physical dimension | metrology/vision + deterministic conversion |
-| domain safety rule | domain rule engine |
-| open-ended explanation | semantic verification may be unavailable |
+```text
+question
+  ↓
+web search
+  ↓
+source extraction
+  ↓
+LLM synthesis
+  ↓
+deterministic calculation
+  ↓
+domain rule
+  ↓
+semantic verification
+```
 
-The LLM may remain responsible for interpretation and explanation, but it MUST NOT silently replace a required specialized verifier.
+The overall result MUST identify which claims were verified and by which capabilities. One successful verifier MUST NOT automatically certify unrelated claims.
 
-## 6. Measurement rule
+## 12. Measurement rule
 
-For physical measurements, perception and calculation are separate stages:
+Physical measurement MUST separate perception from computation:
 
 ```text
 image
  ↓
 measurement_candidate
  ↓
-deterministic conversion
+metrology / vision verification
  ↓
-unit normalization
+deterministic conversion
  ↓
 range / consistency checks
  ↓
-verification result
+semantic verification
 ```
 
 Example:
@@ -138,39 +332,36 @@ Example:
 28 mm / 25.4 = 1.102362... in
 ```
 
-A perception result of `28 mm` cannot be silently converted to `1 in`. The conversion engine must preserve the actual value and any rounding policy.
+The LLM MUST NOT silently normalize 28 mm to 1 inch.
 
-## 7. Logic/math rule
+## 13. Failure and recovery
 
-Example:
-
-```text
-17 sheep
-all except 9 die
-```
-
-The candidate `8` is executable output but fails the deterministic semantic check. The correct pipeline is:
+The original candidate MUST be retained when verification fails.
 
 ```text
-LLM → 8
+LLM → "180"
  ↓
-verify.math.v1
+units.convert.v1
  ↓
 FAIL
  ↓
 semantic_verified=false
+ ↓
+REPLAN / ESCALATE
+ ↓
+correct candidate
 ```
 
-VUA MUST preserve the original candidate and verifier evidence for auditability.
+Recovery MUST produce a new attempt/evidence identity rather than overwriting the failed attempt.
 
-## 8. Security boundary
+## 14. Security boundary
 
-Authorization MUST precede any adapter side-effect:
+Authorization MUST precede every adapter side-effect:
 
 ```text
 REQUEST
  ↓
-VUA capability selection
+capability selection
  ↓
 VORTEX identity
  ↓
@@ -180,84 +371,112 @@ policy / scope / limits
  ↓
 ALLOW
  ↓
-adapter execution
+adapter
 ```
 
-An adapter MUST NOT self-assert unrestricted principal or wildcard authority. Authority belongs to the governed request/policy context.
+An adapter MUST NOT self-assert unrestricted principal or wildcard authority.
 
-## 9. Proof boundary
+## 15. Proof boundary
 
-VUA and Vortex MUST distinguish:
+VUA/Vortex MUST distinguish:
 
-- `execution_verified`: execution/evidence chain passed its integrity checks;
-- `evidence_integrity_verified`: hashes/signatures/canonicalization passed;
-- `semantic_verified`: an applicable verifier passed;
-- `side_effect_verified`: an external effect has independently verifiable evidence.
+- `execution_verified` — execution/evidence chain passed integrity checks;
+- `evidence_integrity_verified` — hashes/signatures/canonicalization passed;
+- `semantic_verified` — applicable verifier passed;
+- `side_effect_verified` — external effect has independently verifiable evidence.
 
-These claims are independent. A valid Ed25519 signature or SHA-256 digest MUST NOT be interpreted as semantic correctness.
+Cryptographic integrity MUST NOT be interpreted as semantic truth.
 
-## 10. Benchmark boundary
+## 16. Offline-first / online augmentation
 
-Benchmark records MUST identify the measured window:
+Core VUA operation MUST remain possible without cloud connectivity when the required capabilities are local.
 
-```json
-{
-  "wall_duration_ms": 41460,
-  "governed_execution_duration_ms": 17,
-  "provider_duration_ms": 41400
-}
+When connectivity is available, VUA MAY activate authorized network capabilities such as web search or external APIs.
+
+```text
+OFFLINE
+LLM + local RAG + deterministic + local tools
+
+ONLINE
+        + web/API/search
+        + remote models
+        + federation
 ```
 
-Values are illustrative. Implementations MUST record only measured values.
+Connectivity MUST be a capability constraint, not an architectural dependency.
 
-A benchmark comparing different measurement windows is invalid unless the difference is explicitly normalized.
+## 17. Conformance tests
 
-## 11. Conformance tests
-
-A conforming VUA implementation MUST test at least:
+A conforming implementation MUST test:
 
 1. deterministic arithmetic verification;
 2. unit conversion precision;
 3. semantic rejection of an incorrect but successfully executed LLM answer;
 4. `NOT_PROVABLE` when no verifier exists;
-5. schema validation;
-6. verifier identity/version tracking;
-7. authorization before adapter side-effect;
-8. preservation of candidate output and verification evidence;
-9. separation of wall-clock and governed execution latency;
-10. proof integrity independent from semantic correctness.
+5. current-fact routing to authorized web/API capability;
+6. preservation and hashing of external evidence;
+7. escalation after verifier failure;
+8. bounded retry/attempt policy;
+9. capability identity/version tracking;
+10. authorization before adapter side-effect;
+11. preservation of failed candidates and evidence;
+12. independent proof of evidence integrity;
+13. separation of sandbox hash from candidate-output hash;
+14. offline behavior when network capabilities are unavailable.
 
-## 12. Relationship with Vortex
+## 18. Relationship with Vortex
 
 ```text
-VUA = capability discovery + routing + adapter execution
-Vortex = authority + policy + bounded execution + evidence + independent verification
+VUA
+= capability discovery
++ task decomposition
++ routing
++ escalation
++ adapter invocation
+
+Vortex
+= identity
++ authority
++ policy
++ bounded execution
++ evidence
++ independent verification
++ proof
 ```
 
-VUA does not replace Vortex governance. Vortex does not need to know the implementation details of every specialized capability, but it MUST govern the capability invocation and its proof boundary.
+VUA selects what should help. Vortex governs whether and how that capability may execute.
 
-## 13. Maturity gate
-
-The following claim is prohibited until the corresponding evidence exists:
+## 19. Maturity gate
 
 ```text
-EXECUTION_SUCCESS
-      ≠
-SEMANTIC_VERIFIED
+M0 capability descriptor
+ ↓
+M1 routing contract + tests
+ ↓
+M2 real capability execution
+ ↓
+M3 independent semantic verification
+ ↓
+M4 evidence graph + proof
+ ↓
+M5 escalation/recovery
+ ↓
+M6 CI/conformance + promotion
 ```
 
-The target maturity path is:
+The prohibited shortcut is:
 
 ```text
-M0 capability exists
- ↓
-M1 capability contract + tests
- ↓
-M2 real execution
- ↓
-M3 independent verification
- ↓
-M4 proof + benchmark evidence
- ↓
-M5 CI/conformance + promotion
+LLM confidence → VERIFIED
+```
+
+The required path is:
+
+```text
+proposal
+ → capability selection
+ → governed execution
+ → evidence
+ → independent verification
+ → PASS / FAIL / NOT_PROVABLE
 ```
