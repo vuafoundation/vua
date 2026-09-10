@@ -205,6 +205,43 @@ export async function handleMCPMessage(message: {
 }> {
   const { id, method, params } = message;
 
+  // MCP Handshake & Protocol Lifecycle
+  if (method === 'initialize') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        protocolVersion: '2024-11-05',
+        capabilities: {
+          tools: {
+            listChanged: false,
+          },
+        },
+        serverInfo: {
+          name: 'vua-mcp-server',
+          version: '1.0.0',
+          description: 'VUA - Vortex Universal Connector & Governance Protocol',
+        },
+      },
+    };
+  }
+
+  if (method === 'notifications/initialized' || method === 'initialized') {
+    return {
+      jsonrpc: '2.0',
+      id: id ?? null,
+      result: {},
+    };
+  }
+
+  if (method === 'ping') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {},
+    };
+  }
+
   if (method === 'tools/list') {
     return {
       jsonrpc: '2.0',

@@ -29,6 +29,15 @@ async function startServer() {
   const app = express();
 
   // Middleware
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, mcp-session-id');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
   app.use(express.json({ limit: '10mb' }));
 
   // 1. Health check
@@ -58,9 +67,33 @@ async function startServer() {
     });
   });
 
-  // 3. MCP JSON-RPC 2.0 Endpoint
+  // 3. MCP JSON-RPC 2.0 Endpoint (GET for discovery & POST for JSON-RPC)
+  app.get('/mcp', (req, res) => {
+    res.json({
+      service: 'vua-mcp-server',
+      version: '1.0.0',
+      status: 'ONLINE',
+      protocol: 'MCP JSON-RPC 2.0',
+      transport: 'HTTP POST',
+      endpoint: '/mcp',
+      auth: 'Bearer Token (Header) or AuthorizationContext (JSON Body)',
+      tools_endpoint: '/mcp (method: tools/list)',
+      tools_count: VORTEX_MCP_TOOLS.length,
+      tools: VORTEX_MCP_TOOLS.map((t) => t.name),
+    });
+  });
+
   app.post('/mcp', async (req, res) => {
     try {
+      // Extract Bearer token from header if present
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ') && req.body?.params?.arguments) {
+        const token = authHeader.slice(7).trim();
+        if (!req.body.params.arguments.approval_token && token) {
+          req.body.params.arguments.approval_token = token;
+        }
+      }
+
       const response = await handleMCPMessage(req.body);
       res.json(response);
     } catch (err: unknown) {
