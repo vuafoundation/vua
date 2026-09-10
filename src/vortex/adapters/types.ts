@@ -12,24 +12,30 @@
 
 import type { ExecutionProof, VerificationResult } from '../types.js';
 
-export type VUAAdapterId = 'github' | 'linux' | 'android' | 'windows';
+export type VUAAdapterId = 'github' | 'linux' | 'android' | 'windows' | 'canary';
 
 export type VUAAdapterStatus = 'online' | 'ready' | 'simulated' | 'degraded';
+
+export type VUAActionRisk = 'read' | 'write' | 'destructive';
+
+export interface VUAActionMetadata {
+  action: string;
+  description: string;
+  risk?: VUAActionRisk;
+  requiresApproval?: boolean;
+  defaultParams?: Record<string, unknown>;
+}
 
 export interface VUAAdapterMetadata {
   id: VUAAdapterId;
   name: string;
-  environment: 'Cloud VCS' | 'POSIX Linux' | 'AOSP Android' | 'Win32/NT Windows';
+  environment: 'Cloud VCS' | 'POSIX Linux' | 'AOSP Android' | 'Win32/NT Windows' | 'test';
   version: string;
   status: VUAAdapterStatus;
   description: string;
   capabilities: string[];
-  supportedActions: Array<{
-    action: string;
-    description: string;
-    requiresApproval?: boolean;
-    defaultParams?: Record<string, unknown>;
-  }>;
+  supportedActions: VUAActionMetadata[];
+  actions?: Record<string, VUAActionMetadata>;
   systemMetrics?: Record<string, string | number>;
 }
 
@@ -40,6 +46,18 @@ export interface VUAActionRequest {
   payload?: Record<string, unknown>;
   approvalToken?: string;
   requestId?: string;
+  authorization?: {
+    principal_id: string;
+    agent_id: string;
+    policy_id: string;
+    policy_version: string;
+    capability: string;
+    scope?: {
+      paths?: string[];
+      repositories?: string[];
+      resources?: string[];
+    };
+  };
 }
 
 export interface VUAActionResult {
@@ -51,6 +69,8 @@ export interface VUAActionResult {
   durationMs: number;
   data: Record<string, unknown>;
   auditLog: string[];
+  execution_kind: 'capability';
+  capability_executed: boolean;
   execution_proof?: ExecutionProof;
   verification?: VerificationResult;
   error?: string;

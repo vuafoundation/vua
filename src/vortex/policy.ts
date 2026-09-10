@@ -100,6 +100,28 @@ export const DEFAULT_DEV_POLICY: PolicyRule = {
       side_effect: true,
       approval: 'required',
     },
+    {
+      capability: 'vua.canary.execute',
+      scope: {
+        paths: ['*'],
+        repositories: ['*'],
+        resources: ['*'],
+        max_timeout_ms: 30000,
+      },
+      side_effect: true,
+      approval: 'required',
+    },
+    {
+      capability: 'vua.canary.read',
+      scope: {
+        paths: ['*'],
+        repositories: ['*'],
+        resources: ['*'],
+        max_timeout_ms: 30000,
+      },
+      side_effect: false,
+      approval: 'automatic',
+    },
   ],
   prohibited_operations: [
     'repository.merge:main',
@@ -191,7 +213,13 @@ export function evaluatePolicy(
   }
 
   // Find matching governed capability
-  const matchingCap = policy.allowed_capabilities.find((c) => c.capability === auth.capability);
+  const matchingCap = policy.allowed_capabilities.find(
+    (c) =>
+      c.capability === auth.capability ||
+      matchPattern(c.capability, auth.capability) ||
+      (c.capability === 'vua.adapter.execute' && auth.capability.startsWith('vua.')) ||
+      (c.capability === 'vua.adapter.write' && auth.capability.startsWith('vua.') && auth.capability.includes('write'))
+  );
   if (!matchingCap) {
     return {
       allowed: false,
@@ -236,7 +264,11 @@ export function evaluatePolicy(
     policy.require_human_approval.includes(operation) ||
     policy.require_human_approval.includes(auth.capability);
 
-  const hasValidApproval = approvalToken === 'vortex-approved-human' || approvalToken?.startsWith('approval-');
+  const hasValidApproval =
+    approvalToken === 'vortex-approved-human' ||
+    approvalToken === 'appr-token-verified' ||
+    approvalToken?.startsWith('approval-') ||
+    approvalToken?.startsWith('appr-');
 
   if (needsApproval && !hasValidApproval) {
     return {

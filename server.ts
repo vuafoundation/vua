@@ -21,6 +21,7 @@ import { executeGovernedLLM, probeLocalLLM, type LLMConfig } from './src/vortex/
 import { handleMCPMessage, VORTEX_MCP_TOOLS } from './src/vortex/mcp-server.js';
 import { vuaRegistry } from './src/vortex/adapters/registry.js';
 import { verifyExecutionProof } from './src/vortex/verifier.js';
+import { runAgentPatchArena } from './scripts/agent-patch-arena.js';
 
 const PORT = 3000;
 
@@ -213,6 +214,26 @@ async function startServer() {
   app.post('/api/vortex/reset-replay', (req, res) => {
     resetAntiReplayCache();
     res.json({ status: 'ok', message: 'Anti-replay nonce cache cleared' });
+  });
+
+  // 13.1. Agent Patch Arena Tournament Endpoint
+  app.get('/api/vortex/arena/tournament', async (req, res) => {
+    try {
+      const result = await runAgentPatchArena();
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/vortex/arena/tournament', async (req, res) => {
+    try {
+      const candidates = req.body?.candidates;
+      const result = await runAgentPatchArena(candidates);
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ error: String(err) });
+    }
   });
 
   // 14. LLM Providers Info

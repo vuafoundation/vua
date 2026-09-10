@@ -11,6 +11,7 @@ import { GOS3SandboxManager } from './components/GOS3SandboxManager.js';
 import { CIBenchmarkGate } from './components/CIBenchmarkGate.js';
 import { MascotModal } from './components/MascotModal.js';
 import { SemanticOracleView } from './components/SemanticOracleView.js';
+import { CapabilityMatrix } from './components/CapabilityMatrix.js';
 import type { ExecutionProof } from './vortex/types.js';
 
 export default function App() {
@@ -74,6 +75,10 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         {activeTab === 'vua-adapters' && (
           <VUAAdaptersView onSendToVerifier={handleSendToVerifier} />
+        )}
+
+        {activeTab === 'capability-matrix' && (
+          <CapabilityMatrix />
         )}
 
         {activeTab === 'semantic-oracle' && (

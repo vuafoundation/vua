@@ -53,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navItems = [
     { id: 'vua-adapters', label: 'Adaptadores VUA', icon: Layers },
+    { id: 'capability-matrix', label: 'Matriz de Capacidades (100)', icon: Sparkles },
     { id: 'semantic-oracle', label: 'Oráculo Semântico (30 Casos)', icon: Brain },
     { id: 'github-manager', label: 'GitHub & Projetos', icon: FolderGit2 },
     { id: 'workbench', label: 'MCP Workbench', icon: Terminal },

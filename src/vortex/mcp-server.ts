@@ -244,6 +244,8 @@ export async function handleMCPMessage(message: {
             model: llmResult.model,
             usage: llmResult.usage,
             duration_ms: llmResult.duration_ms,
+            execution_kind: 'llm',
+            capability_executed: false,
             execution_proof: llmResult.execution_proof,
             verification: llmResult.verification,
           },
@@ -278,6 +280,8 @@ export async function handleMCPMessage(message: {
           target: args.target as Record<string, unknown>,
           payload: args.payload as Record<string, unknown>,
           approvalToken: args.approval_token as string,
+          requestId: args.request_id as string,
+          authorization: args.authorization as any,
         });
         return {
           jsonrpc: '2.0',

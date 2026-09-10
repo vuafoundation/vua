@@ -104,6 +104,7 @@ export interface ExecutionProof {
   principal_id: string;
   connector_id: string;
   operation: VortexOperation | string;
+  execution_kind?: 'llm' | 'capability' | string;
   executed: boolean; // True ONLY if connector.invoke was initiated!
   status: VortexStatus | string;
   input_hash: string;  // sha256:...

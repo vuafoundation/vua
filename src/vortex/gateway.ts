@@ -60,6 +60,7 @@ export async function executeVortexPipeline(
   const executionId = `exec-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
   const runtimeId = 'vortex-runtime-node22-hardened';
   const connectorId = req.target?.path?.startsWith('/') || req.operation === 'branch.write' ? 'connector:filesystem' : 'connector:governed-runtime';
+  const executionKind = req.target?.adapter ? 'capability' : (req.input?.prompt ? 'llm' : 'capability');
 
   const policyId = req.authorization?.policy_id || 'vortex-development';
   const policyVersion = req.authorization?.policy_version || '1.0.0';
@@ -94,6 +95,7 @@ export async function executeVortexPipeline(
       principal_id: req.authorization?.principal_id || CURRENT_IDENTITY.principal_id,
       connector_id: connectorId,
       operation: req.operation,
+      execution_kind: executionKind,
       executed: false,
       status: 'REPLAY_REJECTED',
       input_hash: inputHash,
@@ -134,6 +136,7 @@ export async function executeVortexPipeline(
       principal_id: req.authorization?.principal_id || CURRENT_IDENTITY.principal_id,
       connector_id: connectorId,
       operation: req.operation,
+      execution_kind: executionKind,
       executed: false,
       status: 'POLICY_DENIED',
       input_hash: inputHash,
@@ -167,6 +170,7 @@ export async function executeVortexPipeline(
         principal_id: req.authorization?.principal_id || CURRENT_IDENTITY.principal_id,
         connector_id: connectorId,
         operation: req.operation,
+        execution_kind: executionKind,
         executed: false,
         status: 'SANDBOX_DENIED',
         input_hash: inputHash,
@@ -201,6 +205,7 @@ export async function executeVortexPipeline(
         principal_id: req.authorization?.principal_id || CURRENT_IDENTITY.principal_id,
         connector_id: connectorId,
         operation: req.operation,
+        execution_kind: executionKind,
         executed: false,
         status: 'SANDBOX_DENIED',
         input_hash: inputHash,
@@ -233,6 +238,7 @@ export async function executeVortexPipeline(
         principal_id: req.authorization?.principal_id || CURRENT_IDENTITY.principal_id,
         connector_id: connectorId,
         operation: req.operation,
+        execution_kind: executionKind,
         executed: false,
         status: 'ONBOARD_REQUIRED',
         input_hash: inputHash,
@@ -263,6 +269,7 @@ export async function executeVortexPipeline(
         principal_id: req.authorization?.principal_id || CURRENT_IDENTITY.principal_id,
         connector_id: connectorId,
         operation: req.operation,
+        execution_kind: executionKind,
         executed: false,
         status: 'ONBOARD_REQUIRED',
         input_hash: inputHash,
@@ -329,6 +336,7 @@ export async function executeVortexPipeline(
     principal_id: req.authorization?.principal_id || CURRENT_IDENTITY.principal_id,
     connector_id: connectorId,
     operation: req.operation,
+    execution_kind: executionKind,
     executed: true, // Crucial: connector started!
     status: executionStatus,
     input_hash: inputHash,

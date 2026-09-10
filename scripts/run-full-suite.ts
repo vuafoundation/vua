@@ -28,6 +28,7 @@ import { VORTEX_MCP_TOOLS } from '../src/vortex/mcp-server.js';
 import { probeLocalLLM } from '../src/vortex/llm.js';
 import { runGOS3HeaderAudit } from './verify-gos3-headers.js';
 import { BENCHMARK_QUESTIONS, evaluateSemanticVerdict, runCapabilityBenchmarkSuite } from '../src/vortex/semantic-oracle.js';
+import { runCanaryTests } from './test-canary.js';
 
 interface TestSuiteSummary {
   category: string;
@@ -576,7 +577,12 @@ ${benchmarkSummary}`,
     return 5;
   });
 
-  // 13. GENERATE DETERMINISTIC EVIDENCE HASH
+  // 13. CANARY ADAPTER RUNTIME INVARIANTS
+  await runStep('13. Canary Adapter: Side-Effect Blocking & Proof Invariants', async () => {
+    return await runCanaryTests();
+  });
+
+  // 14. GENERATE DETERMINISTIC EVIDENCE HASH
   const evidence = generateExecutionEvidence({
     proofHashes: collectedProofHashes.length > 0 ? collectedProofHashes : ['sha256:dummy-proof-pass'],
     allTestsPassed: true,

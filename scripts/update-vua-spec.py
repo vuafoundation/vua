@@ -182,30 +182,38 @@ for cat, tier, action, default_tool, items in CATEGORY_DATA:
             tool, answer = ans_or_tuple
 
         # Determinação refinada de políticas
+        available_tools = []
         if cat == "governanca":
             tool_policy = "forbidden"
             answer_policy = "abstain"
+            available_tools = []
         elif cat in ("tool_local", "freshness"):
             tool_policy = "required"
             answer_policy = "evidence_required"
+            available_tools = [tool] if tool else ["web.search"]
         elif cat in ("unidades", "aritmetica"):
             tool_policy = "preferred"
             answer_policy = "exact"
+            available_tools = [tool] if tool else []
         elif cat == "abstencao":
             tool_policy = "forbidden"
             answer_policy = "abstain"
+            available_tools = []
         elif cat == "literalidade":
             tool_policy = "forbidden"
             answer_policy = "exact"
+            available_tools = []
         else:
             tool_policy = "optional"
             answer_policy = "semantic"
+            available_tools = []
 
         cases.append({
             "id": case_id,
             "tier": tier,
             "category": cat,
             "prompt": prompt,
+            "available_tools": available_tools,
             "expected": {
                 "answer": answer,
                 "action": action,

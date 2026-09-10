@@ -1,0 +1,87 @@
+name: Vortex Agent Patch Arena & Darwinian Selection Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      auto_merge_winner:
+        description: 'Auto-merge winning qualified patch if score threshold reached'
+        type: boolean
+        required: true
+        default: false
+      min_score_threshold:
+        description: 'Minimum composite score for auto-merge consideration'
+        type: number
+        required: false
+        default: 65.0
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  agent-tournament:
+    name: Compete in Agent Patch Arena
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Base and Candidate Branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      # 1. Typecheck & Protocol Syntax Validation
+      - name: Static Protocol Linting
+        run: npm run lint
+
+      # 2. Critical Gate: Canary Invariant Validation
+      - name: Execute Canary Side-Effect & Security Invariants
+        run: |
+          echo "🐤 Running Canary Invariants Gate..."
+          npx tsx scripts/test-canary.ts
+
+      # 3. Darwinian Agent Arena Benchmark & Leaderboard Ranking
+      - name: Run Patch Tournament Benchmark
+        id: arena_eval
+        run: |
+          echo "🏆 Running Multi-Agent Patch Tournament..."
+          npx tsx scripts/agent-patch-arena.ts > arena_output.txt 2>&1
+          cat arena_output.txt
+
+      # 4. Post Tournament Leaderboard to PR Comments
+      - name: Comment Arena Leaderboard on Pull Request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let output = 'No arena output captured';
+            if (fs.existsSync('arena_output.txt')) {
+              output = fs.readFileSync('arena_output.txt', 'utf8');
+            }
+            const body = `### 🏆 Vortex Multi-Agent Patch Arena Results\n\n\`\`\`text\n${output}\n\`\`\`\n\n*Evaluated by deterministic cryptographic CI gates.*`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      # 5. Archive Verifiable Tournament Evidence
+      - name: Archive Arena Cryptographic Evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-arena-evidence
+          path: arena_output.txt
