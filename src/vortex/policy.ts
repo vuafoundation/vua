@@ -137,7 +137,8 @@ export const DEFAULT_DEV_POLICY: PolicyRule = {
   max_timeout_ms: 30000,
 };
 
-function matchPattern(pattern: string, value: string): boolean {
+function matchPattern(pattern: string, value?: string): boolean {
+  if (!value || typeof value !== 'string') return false;
   if (pattern === '*' || pattern === '**') return true;
   if (pattern.endsWith('/*')) {
     const prefix = pattern.slice(0, -2);
@@ -217,8 +218,8 @@ export function evaluatePolicy(
     (c) =>
       c.capability === auth.capability ||
       matchPattern(c.capability, auth.capability) ||
-      (c.capability === 'vua.adapter.execute' && auth.capability.startsWith('vua.')) ||
-      (c.capability === 'vua.adapter.write' && auth.capability.startsWith('vua.') && auth.capability.includes('write'))
+      (c.capability === 'vua.adapter.execute' && typeof auth.capability === 'string' && auth.capability.startsWith('vua.')) ||
+      (c.capability === 'vua.adapter.write' && typeof auth.capability === 'string' && auth.capability.startsWith('vua.') && auth.capability.includes('write'))
   );
   if (!matchingCap) {
     return {

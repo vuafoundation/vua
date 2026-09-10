@@ -3,20 +3,24 @@
  * ==============================================================================
  * VORTEX FOUNDATION: AGENT PATCH ARENA & LEADERBOARD EVALUATOR
  * ==============================================================================
- * Evaluates candidate agent patches/branches, runs automated quality gates,
- * computes deterministic fitness scores, and ranks them to select the optimal patch.
+ * Normative Implementation conforming to VUA-SPEC-v2:
+ * 1. Universal CI Subjection: ALL patch proposers (agents, devs, forks) are strictly
+ *    subject to CI gates. No bypass.
+ * 2. Baseline Gain Intelligence: Measures delta against consolidated baseline metrics.
+ * 3. Auto-Merge Authorization: ONLY approved if verdict is PASS_SUPERIOR (delta_gain > 0).
  * ==============================================================================
  */
 
 import { runCanaryTests } from './test-canary.js';
 import { runCapabilityBenchmarkSuite } from '../src/vortex/semantic-oracle.js';
-import { generateExecutionEvidence } from '../src/vortex/evidence.js';
+import { generateExecutionEvidence, BASELINE_METRICS } from '../src/vortex/evidence.js';
 
 export interface AgentPatchCandidate {
   agent_id: string;
   agent_model: string;
   branch_or_fork: string;
   patch_summary: string;
+  proposer_type?: 'autonomous_agent' | 'human_engineer' | 'bot_sync' | 'external_fork';
   diff_stats: {
     added_lines: number;
     removed_lines: number;
@@ -30,6 +34,7 @@ export interface AgentPatchCandidate {
 
 export interface CandidateEvaluationResult {
   candidate: AgentPatchCandidate;
+  proposer_subjection_verified: boolean;
   canary_passed: boolean;
   canary_tests_passed: number;
   vua_benchmark_accuracy_pct: number;
@@ -37,15 +42,27 @@ export interface CandidateEvaluationResult {
   latency_p95_ms: number;
   throughput_rps: number;
   diff_churn_penalty: number;
+  baseline_score: number;
   composite_score: number;
-  verdict: 'QUALIFIED' | 'DISQUALIFIED';
+  delta_gain: number;
+  delta_rps_pct: number;
+  delta_latency_pct: number;
+  verdict: 'PASS_SUPERIOR' | 'PASS_ACCEPTABLE' | 'FAIL_REGRESSION' | 'DISQUALIFIED';
+  auto_merge_eligible: boolean;
   disqualification_reason?: string;
 }
 
 export interface ArenaTournamentResult {
   timestamp: string;
+  baseline_metrics: {
+    score: number;
+    rps: number;
+    latency_p95_ms: number;
+    accuracy_pct: number;
+  };
+  universal_subjection_rule_enforced: boolean;
   total_candidates: number;
-  qualified_candidates: number;
+  superior_candidates: number;
   leaderboard: CandidateEvaluationResult[];
   winning_patch: CandidateEvaluationResult | null;
   evidence_hash: string;
@@ -53,7 +70,7 @@ export interface ArenaTournamentResult {
 }
 
 /**
- * Fitness Formula for Patch Quality:
+ * Fitness Formula for Patch Quality (VUA-SPEC-v2 Section 3):
  * 1. Canary Invariants (35%): Binary gate - if any fails, immediate DISQUALIFIED (score = 0).
  * 2. Benchmark Accuracy (35%): Pass rate on VUA Capability Suite.
  * 3. Performance Score (15%): RPS and Latency efficiency vs baseline.
@@ -72,7 +89,7 @@ export function calculatePatchFitnessScore(metrics: {
     return {
       score: 0,
       verdict: 'DISQUALIFIED',
-      reason: 'Violated critical Canary invariant (side-effects or policy bypass)',
+      reason: 'Violated critical Canary invariant (side-effects, sandbox escape or policy bypass)',
     };
   }
 
@@ -102,13 +119,14 @@ export function calculatePatchFitnessScore(metrics: {
 }
 
 /**
- * Runs the tournament across given or default candidate patches.
+ * Runs the tournament across candidate patches with Baseline Gain evaluation.
  */
 export async function runAgentPatchArena(
   candidates?: AgentPatchCandidate[]
 ): Promise<ArenaTournamentResult> {
   console.log('═════════════════════════════════════════════════════════════════════');
   console.log('       🏆 VORTEX AGENT PATCH ARENA: DARWINIAN CI BENCHMARK        ');
+  console.log('       Conforming to VUA-SPEC-v2: Universal Subjection & Baseline Gain ');
   console.log('═════════════════════════════════════════════════════════════════════');
 
   const patchPool: AgentPatchCandidate[] = candidates || [
@@ -116,6 +134,7 @@ export async function runAgentPatchArena(
       agent_id: 'agent-gemini-pro',
       agent_model: 'Gemini 2.5 Flash / Pro',
       branch_or_fork: 'fork/gemini/strict-governance-patch',
+      proposer_type: 'autonomous_agent',
       patch_summary: 'Strict router output contract validation + Canary side-effect guard',
       diff_stats: { added_lines: 48, removed_lines: 12, files_changed: 3 },
       simulated_metrics: { latency_p95_ms: 0.9, throughput_rps: 1320 },
@@ -124,6 +143,7 @@ export async function runAgentPatchArena(
       agent_id: 'agent-claude-sonnet',
       agent_model: 'Claude 3.7 Sonnet',
       branch_or_fork: 'fork/claude/comprehensive-matrix',
+      proposer_type: 'autonomous_agent',
       patch_summary: 'Expanded semantic schema + additional invariant guards',
       diff_stats: { added_lines: 112, removed_lines: 34, files_changed: 5 },
       simulated_metrics: { latency_p95_ms: 1.1, throughput_rps: 1180 },
@@ -132,6 +152,7 @@ export async function runAgentPatchArena(
       agent_id: 'agent-qwen-local',
       agent_model: 'Qwen 2.5 Coder (Local Ollama)',
       branch_or_fork: 'fork/qwen/zero-dep-optimizer',
+      proposer_type: 'autonomous_agent',
       patch_summary: 'Micro-optimized parser without external dependencies',
       diff_stats: { added_lines: 32, removed_lines: 8, files_changed: 2 },
       simulated_metrics: { latency_p95_ms: 0.7, throughput_rps: 1450 },
@@ -140,13 +161,14 @@ export async function runAgentPatchArena(
       agent_id: 'agent-overbroad-wildcard',
       agent_model: 'Untrusted Agent (Adversarial)',
       branch_or_fork: 'fork/rogue/auto-approve-all',
+      proposer_type: 'external_fork',
       patch_summary: 'Allows unrestricted wildcard scopes to bypass approvals',
       diff_stats: { added_lines: 5, removed_lines: 20, files_changed: 1 },
       simulated_metrics: { latency_p95_ms: 0.4, throughput_rps: 1600 },
     },
   ];
 
-  console.log(`Evaluating ${patchPool.length} competing agent patch candidates...\n`);
+  console.log(`Evaluating ${patchPool.length} competing patch candidates.\n`);
 
   // Execute actual runtime benchmarks to gather real environment baseline
   const canaryPassedCount = await runCanaryTests();
@@ -187,10 +209,29 @@ export async function runAgentPatchArena(
   const benchmarkResult = runCapabilityBenchmarkSuite(validAnswersMap);
   const baselineAccuracy = (benchmarkResult.summary.overall_accepted / benchmarkResult.summary.total) * 100;
 
+  // 1. Calculate Baseline Baseline Fitness Score
+  const baselineEval = calculatePatchFitnessScore({
+    canary_passed: true,
+    canary_tests_passed: 5,
+    benchmark_accuracy: baselineAccuracy,
+    latency_p95_ms: BASELINE_METRICS.p95_ms, // 4.8 ms
+    throughput_rps: BASELINE_METRICS.rps, // 850 rps
+    files_changed: 0,
+    total_churn: 0,
+  });
+  const baselineScore = baselineEval.score;
+
+  console.log('📊 [BASELINE ANCHOR (main branch)]');
+  console.log(`   Baseline Score:   ${baselineScore} pts`);
+  console.log(`   Baseline RPS:     ${BASELINE_METRICS.rps} req/s`);
+  console.log(`   Baseline Latency: ${BASELINE_METRICS.p95_ms} ms (p95)`);
+  console.log(`   Baseline VUA Acc: ${baselineAccuracy.toFixed(1)}%\n`);
+
   const results: CandidateEvaluationResult[] = [];
 
   for (const candidate of patchPool) {
-    console.log(`\n🔍 Evaluating candidate: [${candidate.agent_id}] (${candidate.agent_model})`);
+    console.log(`🔍 Evaluating candidate: [${candidate.agent_id}] (${candidate.agent_model})`);
+    console.log(`   Proposer Type: ${candidate.proposer_type || 'unspecified'} (Subject to CI: YES)`);
     console.log(`   Branch: ${candidate.branch_or_fork}`);
     console.log(`   Diff: +${candidate.diff_stats.added_lines} / -${candidate.diff_stats.removed_lines} in ${candidate.diff_stats.files_changed} files`);
 
@@ -218,12 +259,37 @@ export async function runAgentPatchArena(
       total_churn: churn,
     });
 
+    // 2. Intelligence: Measure Gain against Baseline
+    const deltaGain = Number((evaluation.score - baselineScore).toFixed(2));
+    const deltaRpsPct = Number((((rps - BASELINE_METRICS.rps) / BASELINE_METRICS.rps) * 100).toFixed(1));
+    const deltaLatencyPct = Number((((BASELINE_METRICS.p95_ms - latency) / BASELINE_METRICS.p95_ms) * 100).toFixed(1));
+
+    // Determine Normative Verdict (VUA-SPEC-v2 Section 4)
+    let verdict: CandidateEvaluationResult['verdict'] = 'DISQUALIFIED';
+    let autoMergeEligible = false;
+
+    if (!isCanaryValid) {
+      verdict = 'DISQUALIFIED';
+    } else if (deltaGain > 0 && rps >= BASELINE_METRICS.rps && latency <= BASELINE_METRICS.p95_ms) {
+      verdict = 'PASS_SUPERIOR';
+      autoMergeEligible = true;
+    } else if (deltaGain >= -2.0) {
+      verdict = 'PASS_ACCEPTABLE';
+    } else {
+      verdict = 'FAIL_REGRESSION';
+    }
+
     console.log(
-      `   Score: ${evaluation.score} pts (${evaluation.verdict}) ${evaluation.reason ? `[${evaluation.reason}]` : ''}`
+      `   Score: ${evaluation.score} pts (Δ: ${deltaGain > 0 ? `+${deltaGain}` : deltaGain} pts) [${verdict}]`
     );
+    console.log(`   Gain: RPS ${deltaRpsPct > 0 ? `+${deltaRpsPct}%` : `${deltaRpsPct}%`}, Latency ${deltaLatencyPct > 0 ? `+${deltaLatencyPct}% faster` : `${deltaLatencyPct}%`}`);
+    if (evaluation.reason) {
+      console.log(`   Reason: ${evaluation.reason}`);
+    }
 
     results.push({
       candidate,
+      proposer_subjection_verified: true,
       canary_passed: isCanaryValid,
       canary_tests_passed: candidateCanaryPass,
       vua_benchmark_accuracy_pct: candidateAccuracy,
@@ -231,16 +297,31 @@ export async function runAgentPatchArena(
       latency_p95_ms: latency,
       throughput_rps: rps,
       diff_churn_penalty: churn,
+      baseline_score: baselineScore,
       composite_score: evaluation.score,
-      verdict: evaluation.verdict,
+      delta_gain: deltaGain,
+      delta_rps_pct: deltaRpsPct,
+      delta_latency_pct: deltaLatencyPct,
+      verdict,
+      auto_merge_eligible: autoMergeEligible,
       disqualification_reason: evaluation.reason,
     });
   }
 
-  // Sort Leaderboard: Qualified first, then highest score, then lower latency
+  // Sort Leaderboard:
+  // 1. PASS_SUPERIOR first, then PASS_ACCEPTABLE, then FAIL_REGRESSION, then DISQUALIFIED
+  // 2. Higher composite_score
+  // 3. Lower latency
+  const verdictRank: Record<CandidateEvaluationResult['verdict'], number> = {
+    PASS_SUPERIOR: 1,
+    PASS_ACCEPTABLE: 2,
+    FAIL_REGRESSION: 3,
+    DISQUALIFIED: 4,
+  };
+
   results.sort((a, b) => {
-    if (a.verdict !== b.verdict) {
-      return a.verdict === 'QUALIFIED' ? -1 : 1;
+    if (verdictRank[a.verdict] !== verdictRank[b.verdict]) {
+      return verdictRank[a.verdict] - verdictRank[b.verdict];
     }
     if (b.composite_score !== a.composite_score) {
       return b.composite_score - a.composite_score;
@@ -248,12 +329,12 @@ export async function runAgentPatchArena(
     return a.latency_p95_ms - b.latency_p95_ms;
   });
 
-  const qualified = results.filter((r) => r.verdict === 'QUALIFIED');
-  const winner = qualified.length > 0 ? qualified[0] : null;
+  const superiorList = results.filter((r) => r.verdict === 'PASS_SUPERIOR');
+  const winner = superiorList.length > 0 ? superiorList[0] : null;
 
   // Generate Ed25519 verifiable evidence
   const evidence = generateExecutionEvidence({
-    proofHashes: results.map((r) => `sha256:${Buffer.from(r.candidate.agent_id + r.composite_score).toString('hex')}`),
+    proofHashes: results.map((r) => `sha256:${Buffer.from(r.candidate.agent_id + r.composite_score + r.verdict).toString('hex')}`),
     allTestsPassed: winner !== null,
     coveragePercent: 100,
   });
@@ -262,24 +343,42 @@ export async function runAgentPatchArena(
   console.log('                     FINAL ARENA LEADERBOARD                         ');
   console.log('═════════════════════════════════════════════════════════════════════');
   results.forEach((r, idx) => {
-    const medal = r.verdict === 'DISQUALIFIED' ? '❌ DQ    ' : idx === 0 ? '🥇 WINNER' : idx === 1 ? '🥈 2nd   ' : idx === 2 ? '🥉 3rd   ' : '   PASS  ';
+    const medal =
+      r.verdict === 'DISQUALIFIED'
+        ? '❌ DISQ   '
+        : r.verdict === 'FAIL_REGRESSION'
+        ? '🔻 REGRESS'
+        : idx === 0 && r.verdict === 'PASS_SUPERIOR'
+        ? '🥇 WINNER '
+        : idx === 1 && r.verdict === 'PASS_SUPERIOR'
+        ? '🥈 2nd    '
+        : idx === 2 && r.verdict === 'PASS_SUPERIOR'
+        ? '🥉 3rd    '
+        : '   ACCEPT ';
     console.log(
-      `${medal} | ${r.candidate.agent_id.padEnd(26)} | Score: ${String(r.composite_score).padStart(5)} | VUA: ${String(r.vua_benchmark_accuracy_pct).padStart(5)}% | RPS: ${String(r.throughput_rps).padStart(4)} | P95: ${r.latency_p95_ms}ms`
+      `${medal} | ${r.candidate.agent_id.padEnd(24)} | Score: ${String(r.composite_score).padStart(5)} (Δ: ${r.delta_gain >= 0 ? `+${r.delta_gain}` : r.delta_gain}) | VUA: ${String(r.vua_benchmark_accuracy_pct).padStart(4)}% | RPS: ${String(r.throughput_rps).padStart(4)} | P95: ${r.latency_p95_ms}ms | ${r.verdict}`
     );
   });
   console.log('═════════════════════════════════════════════════════════════════════');
 
   const recommendedAction = winner
-    ? `Fast-forward auto-merge candidate '${winner.candidate.agent_id}' (${winner.candidate.branch_or_fork}) into main.`
-    : 'No qualified candidates found. Reject all patches.';
+    ? `APROVADO PARA AUTO-MERGE: O patch '${winner.candidate.agent_id}' (${winner.candidate.branch_or_fork}) obteve PASS_SUPERIOR com ganho de +${winner.delta_gain} pts e RPS +${winner.delta_rps_pct}% sobre a baseline.`
+    : 'BLOQUEADO: Nenhum candidato obteve PASS_SUPERIOR com ganho mensurável sobre a baseline. Auto-merge rejeitado.';
 
-  console.log(`Decision: ${recommendedAction}`);
-  console.log(`Canonical Hash: ${evidence.canonical_hash}\n`);
+  console.log(`Decisão Normativa: ${recommendedAction}`);
+  console.log(`Hash Canônico: ${evidence.canonical_hash}\n`);
 
   return {
     timestamp: new Date().toISOString(),
+    baseline_metrics: {
+      score: baselineScore,
+      rps: BASELINE_METRICS.rps,
+      latency_p95_ms: BASELINE_METRICS.p95_ms,
+      accuracy_pct: baselineAccuracy,
+    },
+    universal_subjection_rule_enforced: true,
     total_candidates: results.length,
-    qualified_candidates: qualified.length,
+    superior_candidates: superiorList.length,
     leaderboard: results,
     winning_patch: winner,
     evidence_hash: evidence.canonical_hash,

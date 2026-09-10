@@ -80,29 +80,53 @@ async function callGemini(
   config: LLMConfig
 ): Promise<{ text: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }> {
   const client = getGeminiClient(config.apiKey);
-  const modelName = config.model || 'gemini-3.8-flash';
+  let modelName = config.model || 'gemini-3.8-flash';
 
   const geminiConfig: Record<string, unknown> = {};
   if (config.temperature !== undefined) geminiConfig.temperature = config.temperature;
   if (config.maxTokens !== undefined) geminiConfig.maxOutputTokens = config.maxTokens;
   if (config.systemInstruction) geminiConfig.systemInstruction = config.systemInstruction;
 
-  const response = await client.models.generateContent({
-    model: modelName,
-    contents: prompt,
-    config: Object.keys(geminiConfig).length > 0 ? (geminiConfig as any) : undefined,
-  });
+  try {
+    const response = await client.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: Object.keys(geminiConfig).length > 0 ? (geminiConfig as any) : undefined,
+    });
 
-  const text = response.text || '';
-  const usage = response.usageMetadata
-    ? {
-        prompt_tokens: response.usageMetadata.promptTokenCount,
-        completion_tokens: response.usageMetadata.candidatesTokenCount,
-        total_tokens: response.usageMetadata.totalTokenCount,
-      }
-    : undefined;
+    const text = response.text || '';
+    const usage = response.usageMetadata
+      ? {
+          prompt_tokens: response.usageMetadata.promptTokenCount,
+          completion_tokens: response.usageMetadata.candidatesTokenCount,
+          total_tokens: response.usageMetadata.totalTokenCount,
+        }
+      : undefined;
 
-  return { text, usage };
+    return { text, usage };
+  } catch (err: any) {
+    // If 429 or quota limit hit on gemini-3.8-flash, try graceful fallback to gemini-3.1-flash-lite
+    if ((err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota')) && modelName !== 'gemini-3.1-flash-lite') {
+      console.warn(`Gemini model ${modelName} hit quota/429. Falling back to gemini-3.1-flash-lite...`);
+      const fallbackResponse = await client.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: prompt,
+        config: Object.keys(geminiConfig).length > 0 ? (geminiConfig as any) : undefined,
+      });
+
+      const text = fallbackResponse.text || '';
+      const usage = fallbackResponse.usageMetadata
+        ? {
+            prompt_tokens: fallbackResponse.usageMetadata.promptTokenCount,
+            completion_tokens: fallbackResponse.usageMetadata.candidatesTokenCount,
+            total_tokens: fallbackResponse.usageMetadata.totalTokenCount,
+          }
+        : undefined;
+
+      return { text, usage };
+    }
+    throw err;
+  }
 }
 
 /**
