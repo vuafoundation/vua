@@ -5,6 +5,7 @@
 
 import express from 'express';
 import path from 'path';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { runAdversarialSuite, runFoundationE2ESuite, runVUAAdaptersE2ESuite } from './src/vortex/conformance.js';
 import { generateVortexIdentity, KEY_REGISTRY } from './src/vortex/crypto.js';
@@ -67,20 +68,98 @@ async function startServer() {
     });
   });
 
-  // 3. MCP JSON-RPC 2.0 Endpoint (GET for discovery & POST for JSON-RPC)
-  app.get('/mcp', (req, res) => {
+  // 3. MCP JSON-RPC 2.0 & SSE Transports (Claude Mobile / Cursor / Anthropic Connectors)
+  const sseSessions = new Map<string, express.Response>();
+
+  const handleSseConnection = (req: express.Request, res: express.Response) => {
+    const sessionId = crypto.randomUUID();
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    sseSessions.set(sessionId, res);
+
+    // Initial endpoint announcement for MCP SSE protocol
+    const host = req.get('host') || 'localhost:3000';
+    const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+    const endpointUrl = `${protocol}://${host}/mcp/messages?sessionId=${sessionId}`;
+
+    res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
+
+    // Heartbeat every 15 seconds
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      sseSessions.delete(sessionId);
+    });
+  };
+
+  app.get(['/mcp', '/sse'], (req, res) => {
+    if (req.headers.accept && req.headers.accept.includes('text/event-stream')) {
+      return handleSseConnection(req, res);
+    }
     res.json({
       service: 'vua-mcp-server',
       version: '1.0.0',
       status: 'ONLINE',
       protocol: 'MCP JSON-RPC 2.0',
-      transport: 'HTTP POST',
-      endpoint: '/mcp',
-      auth: 'Bearer Token (Header) or AuthorizationContext (JSON Body)',
+      transports: ['HTTP POST (direct)', 'Server-Sent Events (SSE)'],
+      endpoints: {
+        sse: '/mcp or /sse (with Accept: text/event-stream)',
+        messages: '/mcp/messages?sessionId=<session_id>',
+        direct_post: '/mcp',
+      },
       tools_endpoint: '/mcp (method: tools/list)',
       tools_count: VORTEX_MCP_TOOLS.length,
       tools: VORTEX_MCP_TOOLS.map((t) => t.name),
     });
+  });
+
+  // Dedicated SSE route for clients explicitly configured with /sse
+  app.get('/sse', (req, res) => {
+    return handleSseConnection(req, res);
+  });
+
+  // MCP Messages Endpoint (POST from SSE clients)
+  app.post(['/mcp/messages', '/messages'], async (req, res) => {
+    try {
+      const sessionId = (req.query.sessionId as string) || (req.headers['mcp-session-id'] as string);
+      const sseRes = sessionId ? sseSessions.get(sessionId) : undefined;
+
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ') && req.body?.params?.arguments) {
+        const token = authHeader.slice(7).trim();
+        if (!req.body.params.arguments.approval_token && token) {
+          req.body.params.arguments.approval_token = token;
+        }
+      }
+
+      const rpcResponse = await handleMCPMessage(req.body);
+
+      if (sseRes) {
+        sseRes.write(`event: message\ndata: ${JSON.stringify(rpcResponse)}\n\n`);
+        return res.status(202).send('Accepted');
+      }
+
+      res.json(rpcResponse);
+    } catch (err: unknown) {
+      res.status(500).json({
+        jsonrpc: '2.0',
+        id: req.body?.id ?? null,
+        error: { code: -32603, message: `Internal error: ${err}` },
+      });
+    }
   });
 
   app.post('/mcp', async (req, res) => {
