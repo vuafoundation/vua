@@ -23,6 +23,7 @@ import { handleMCPMessage, VORTEX_MCP_TOOLS } from './src/vortex/mcp-server.js';
 import { vuaRegistry } from './src/vortex/adapters/registry.js';
 import { verifyExecutionProof } from './src/vortex/verifier.js';
 import { runAgentPatchArena } from './scripts/agent-patch-arena.js';
+import { mountOAuth, requireBearer } from './src/vortex/oauth.js';
 
 const PORT = 3000;
 
@@ -40,6 +41,7 @@ async function startServer() {
     next();
   });
   app.use(express.json({ limit: '10mb' }));
+  mountOAuth(app, { publicBaseUrl: process.env.PUBLIC_BASE_URL });
 
   // 1. Health check
   app.get('/api/health', (req, res) => {
@@ -105,7 +107,7 @@ async function startServer() {
     });
   };
 
-  app.get(['/mcp', '/sse'], (req, res) => {
+  app.get(['/mcp', '/sse'], requireBearer(() => `${process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`}/mcp`), (req, res) => {
     if (req.headers.accept && req.headers.accept.includes('text/event-stream')) {
       return handleSseConnection(req, res);
     }
@@ -127,23 +129,15 @@ async function startServer() {
   });
 
   // Dedicated SSE route for clients explicitly configured with /sse
-  app.get('/sse', (req, res) => {
+  app.get('/sse', requireBearer(() => `${process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`}/mcp`), (req, res) => {
     return handleSseConnection(req, res);
   });
 
   // MCP Messages Endpoint (POST from SSE clients)
-  app.post(['/mcp/messages', '/messages'], async (req, res) => {
+  app.post(['/mcp/messages', '/messages'], requireBearer(() => `${process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`}/mcp`), async (req, res) => {
     try {
       const sessionId = (req.query.sessionId as string) || (req.headers['mcp-session-id'] as string);
       const sseRes = sessionId ? sseSessions.get(sessionId) : undefined;
-
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ') && req.body?.params?.arguments) {
-        const token = authHeader.slice(7).trim();
-        if (!req.body.params.arguments.approval_token && token) {
-          req.body.params.arguments.approval_token = token;
-        }
-      }
 
       const rpcResponse = await handleMCPMessage(req.body);
 
@@ -162,17 +156,8 @@ async function startServer() {
     }
   });
 
-  app.post('/mcp', async (req, res) => {
+  app.post('/mcp', requireBearer(() => `${process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`}/mcp`), async (req, res) => {
     try {
-      // Extract Bearer token from header if present
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ') && req.body?.params?.arguments) {
-        const token = authHeader.slice(7).trim();
-        if (!req.body.params.arguments.approval_token && token) {
-          req.body.params.arguments.approval_token = token;
-        }
-      }
-
       const response = await handleMCPMessage(req.body);
       res.json(response);
     } catch (err: unknown) {
