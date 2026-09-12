@@ -1,116 +1,72 @@
-name: Vortex Agent Patch Arena & Darwinian Selection Gate
+name: Agent Patch Arena — Benchmark Gate
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    branches: [ main, develop ]
-  workflow_dispatch:
-    inputs:
-      auto_merge_winner:
-        description: 'Auto-merge winning qualified patch if verdict is PASS_SUPERIOR'
-        type: boolean
-        required: true
-        default: false
-      min_gain_threshold:
-        description: 'Minimum delta gain over baseline score (e.g. 0.0 or 0.2)'
-        type: number
-        required: false
-        default: 0.0
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: write
-  statuses: write
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: agent-patch-arena-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  agent-tournament:
-    name: Compete in Agent Patch Arena (VUA-SPEC-v2)
+  arena:
+    name: Trusted benchmark comparison
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
     steps:
-      - name: Checkout Base and Candidate Branch
+      - name: Checkout trusted base repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          path: evaluator
 
-      - name: Setup Node.js 22 LTS
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+          cache: npm
+          cache-dependency-path: evaluator/package-lock.json
 
-      - name: Install Dependencies
-        run: npm ci || npm install
+      - name: Verify candidate is reachable
+        working-directory: evaluator
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git cat-file -e "$HEAD_SHA^{commit}"
 
-      # 1. Enforce Universal CI Subjection Rule (No bypass allowed)
-      - name: Verify Universal CI Subjection Invariant
+      - name: Run trusted Patch Arena
+        working-directory: evaluator
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "🛡️ Enforcing VUA-SPEC-v2 Universal CI Subjection Clause..."
-          echo "All proposers (autonomous agents, human developers, bot integrations) are strictly subject to CI gates."
+          python3 scripts/agent-patch-arena.py \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --output "$GITHUB_WORKSPACE/arena-result.json"
 
-      # 2. Typecheck & Protocol Syntax Validation
-      - name: Static Protocol Linting
-        run: npm run lint
-
-      # 3. Critical Gate: Canary Invariant Validation
-      - name: Execute Canary Side-Effect & Security Invariants
-        run: |
-          echo "🐤 Running Canary Invariants Gate..."
-          npx tsx scripts/test-canary.ts
-
-      # 4. Darwinian Agent Arena Benchmark & Baseline Gain Comparator
-      - name: Run Patch Tournament Benchmark & Gain Comparator
-        id: arena_eval
-        run: |
-          echo "🏆 Running Multi-Agent Patch Tournament with Baseline Gain Intelligence..."
-          npx tsx scripts/agent-patch-arena.ts > arena_output.txt 2>&1
-          cat arena_output.txt
-
-      # 5. Evaluate Superiority Gate for Auto-Merge
-      - name: Evaluate Merge Decision Gate
-        id: merge_gate
-        run: |
-          if grep -q "PASS_SUPERIOR" arena_output.txt; then
-            echo "superior_found=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Patch achieved PASS_SUPERIOR against baseline metrics."
-          else
-            echo "superior_found=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️ No patch achieved PASS_SUPERIOR (acceptable or regression). Auto-merge forbidden."
-          fi
-
-      # 6. Post Tournament Leaderboard & Gain Delta to PR Comments
-      - name: Comment Arena Leaderboard & Decision on Pull Request
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let output = 'No arena output captured';
-            if (fs.existsSync('arena_output.txt')) {
-              output = fs.readFileSync('arena_output.txt', 'utf8');
-            }
-            const body = `### 🏆 Vortex Multi-Agent Patch Arena Results (VUA-SPEC-v2)\n\n\`\`\`text\n${output}\n\`\`\`\n\n*Evaluated by deterministic cryptographic CI gates with Baseline Gain Comparator. Auto-merge requires PASS_SUPERIOR.*`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
-
-      # 7. Fast-forward Auto-Merge (Only if PASS_SUPERIOR & auto_merge_winner is enabled)
-      - name: Fast-Forward Auto-Merge Superior Winner
-        if: ${{ steps.merge_gate.outputs.superior_found == 'true' && (inputs.auto_merge_winner == true || contains(github.event.pull_request.labels.*.name, 'automerge-superior')) }}
-        run: |
-          echo "🚀 Executing auto-merge for verified PASS_SUPERIOR candidate..."
-          git config user.name "vortex-ci-robot[bot]"
-          git config user.email "ci-robot@vortex-foundation.org"
-          git checkout main
-          git merge --ff-only "${{ github.head_ref }}"
-          git push origin main
-
-      # 8. Archive Verifiable Tournament Evidence
-      - name: Archive Arena Cryptographic Evidence
+      - name: Publish benchmark evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: agent-arena-evidence
-          path: arena_output.txt
+          name: agent-patch-arena-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: arena-result.json
+          retention-days: 30
+
+      - name: Enforce Arena verdict
+        run: |
+          python3 - <<'PY'
+          import json
+          with open('arena-result.json', encoding='utf-8') as f:
+              result = json.load(f)
+          print('Arena verdict:', result.get('verdict'))
+          print('Reason:', result.get('reason'))
+          if result.get('verdict') != 'PASS_SUPERIOR':
+              raise SystemExit(1)
+          PY
