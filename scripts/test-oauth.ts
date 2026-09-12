@@ -5,6 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import express from 'express';
 import { mountOAuth } from '../src/vortex/oauth.js';
 
@@ -45,8 +46,7 @@ try {
   const client = await register.json();
 
   const verifier = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-._~0123456789';
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  const challenge = Buffer.from(digest).toString('base64url');
+  const challenge = createHash('sha256').update(verifier, 'utf8').digest('base64url');
   const authorize = await request(`/oauth/authorize?response_type=code&client_id=${encodeURIComponent(client.client_id)}&redirect_uri=${encodeURIComponent('https://client.example.test/callback')}&code_challenge=${challenge}&code_challenge_method=S256&scope=mcp&resource=https%3A%2F%2Fvua.example.test%2Fmcp&state=state-1`);
   assert.equal(authorize.status, 200);
 
