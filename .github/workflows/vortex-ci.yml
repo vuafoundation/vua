@@ -6,10 +6,18 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: vortex-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   conformance-and-quality-gates:
     name: Conformance, 100% Quality Gates & GOS3 Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Source Code
@@ -19,33 +27,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install Dependencies
-        run: npm ci || npm install
+      - name: Install Dependencies (lockfile is authoritative)
+        run: npm ci
 
-      # 1. Typecheck & Linting
       - name: Typecheck & Static Analysis
         run: npm run lint
 
-      # 2. GOS3 Contract Header Verification (Local & CI verifiable)
       - name: Audit GOS3 Contract Headers
         run: npm run verify:gos3
 
-      # 3. Production Build Compilation
       - name: Compile Applet & Server
         run: npm run build
 
-      # 4. Full Quality Gates: Unit, Integration (10/10), Stress, Performance, Degradation, Chaos
-      - name: Run Full Conformance Suite (100% Gate Requirement)
+      - name: OAuth MCP Integration Gate
+        run: npm run test:oauth
+
+      - name: Full Conformance Suite (100% Gate Requirement)
         run: npm test
 
-      # 5. Execution Evidence Hash Generation & Archiving
+      - name: Verify all mandatory gates completed
+        if: success()
+        run: |
+          echo "VORTEX_PR_GATE=PASS"
+          echo "Required: npm ci + lint + GOS3 + build + OAuth MCP + full conformance"
+          echo "Merge is permitted only after all required branch-protection checks and reviews pass."
+
       - name: Archive Execution Evidence Proofs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vortex-execution-evidence
+          name: vortex-execution-evidence-${{ github.sha }}
           path: |
             dist/
             metadata.json
+          if-no-files-found: ignore
