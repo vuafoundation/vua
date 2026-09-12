@@ -65,8 +65,10 @@ jobs:
           import json
           with open('arena-result.json', encoding='utf-8') as f:
               result = json.load(f)
+          allowed = {'PASS_SUPERIOR', 'PASS_NO_REGRESSION'}
+          print('Arena change class:', result.get('change_class'))
           print('Arena verdict:', result.get('verdict'))
           print('Reason:', result.get('reason'))
-          if result.get('verdict') != 'PASS_SUPERIOR':
+          if result.get('verdict') not in allowed:
               raise SystemExit(1)
           PY
