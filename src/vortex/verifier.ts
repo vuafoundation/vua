@@ -90,7 +90,11 @@ export function verifyExecutionProof(
   }
 
   // 4. Hashes Verification
-  const isInputHashValid = typeof proof.input_hash === 'string' && proof.input_hash.startsWith('sha256:');
+  const calculatedProofHash = sha256(unsignedProof);
+  if (typeof proof_hash !== 'string') reasons.push('Missing proof_hash');
+  else if (proof_hash !== calculatedProofHash) reasons.push(`PROOF_HASH_MISMATCH: ${proof_hash} != ${calculatedProofHash}`);
+
+  const isInputHashValid = typeof proof.input_hash === 'string' && /^sha256:[0-9a-f]{64}$/.test(proof.input_hash);
   if (!isInputHashValid) {
     checks.input_hash = { passed: false, message: `Invalid input_hash format: ${proof.input_hash}` };
     reasons.push('Malformed input_hash (must be sha256:hex)');
@@ -101,7 +105,7 @@ export function verifyExecutionProof(
     checks.input_hash = { passed: true, message: 'Input hash format and checksum valid' };
   }
 
-  const isOutputHashValid = typeof proof.output_hash === 'string' && proof.output_hash.startsWith('sha256:');
+  const isOutputHashValid = typeof proof.output_hash === 'string' && /^sha256:[0-9a-f]{64}$/.test(proof.output_hash);
   if (!isOutputHashValid) {
     checks.output_hash = { passed: false, message: `Invalid output_hash format: ${proof.output_hash}` };
     reasons.push('Malformed output_hash (must be sha256:hex)');
