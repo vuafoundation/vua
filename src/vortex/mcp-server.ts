@@ -12,6 +12,7 @@
 import { executeVortexPipeline } from './gateway.js';
 import { executeGovernedLLM, type LLMConfig, type LLMProviderType } from './llm.js';
 import { vuaRegistry } from './adapters/registry.js';
+import { verifyExecutionProof } from './verifier.js';
 import type { VortexOperation, VortexRequest, VortexResponse } from './types.js';
 
 export interface MCPToolDefinition {
@@ -255,6 +256,14 @@ export async function handleMCPMessage(message: {
   if (method === 'tools/call') {
     const toolName = params?.name as string;
     const args = (params?.arguments as Record<string, unknown>) || {};
+
+    if (toolName === 'vortex.verify') {
+      const input = (args.input as Record<string, unknown> | undefined) || {};
+      const proof = input.execution_proof as any;
+      if (!proof || typeof proof !== 'object') return { jsonrpc:'2.0', id, result:{ verified:false, valid:false, verification_scope:'full', tamper_evident:true, rfc8785_canonical:false, reasons:['execution_proof is required'] } };
+      const verification = verifyExecutionProof(proof, { expectedOutputHash: typeof input.expected_hash === 'string' ? input.expected_hash : undefined });
+      return { jsonrpc:'2.0', id, result:{ verified:verification.valid, valid:verification.valid, verification_scope:'full', tamper_evident:true, rfc8785_canonical:verification.checks.canonicalization.passed, reasons:verification.reasons, checks:verification.checks, verified_at:verification.verified_at } };
+    }
 
     if (toolName === 'vortex.llm.invoke') {
       const prompt = (args.prompt as string) || '';
