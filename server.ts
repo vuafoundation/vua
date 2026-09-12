@@ -23,6 +23,7 @@ import { handleMCPMessage, VORTEX_MCP_TOOLS } from './src/vortex/mcp-server.js';
 import { vuaRegistry } from './src/vortex/adapters/registry.js';
 import { verifyExecutionProof } from './src/vortex/verifier.js';
 import { runAgentPatchArena } from './scripts/agent-patch-arena.js';
+import { mountOAuth, requireOAuthForMcp } from './src/vortex/oauth.js';
 
 const PORT = 3000;
 
@@ -69,6 +70,8 @@ async function startServer() {
   });
 
   // 3. MCP JSON-RPC 2.0 & SSE Transports (Claude Mobile / Cursor / Anthropic Connectors)
+  mountOAuth(app, { publicBaseUrl: process.env.PUBLIC_BASE_URL });
+
   const sseSessions = new Map<string, express.Response>();
 
   const handleSseConnection = (req: express.Request, res: express.Response) => {
@@ -105,7 +108,7 @@ async function startServer() {
     });
   };
 
-  app.get(['/mcp', '/sse'], (req, res) => {
+  app.get(['/mcp', '/sse'], requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), (req, res) => {
     if (req.headers.accept && req.headers.accept.includes('text/event-stream')) {
       return handleSseConnection(req, res);
     }
@@ -127,12 +130,12 @@ async function startServer() {
   });
 
   // Dedicated SSE route for clients explicitly configured with /sse
-  app.get('/sse', (req, res) => {
+  app.get('/sse', requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), (req, res) => {
     return handleSseConnection(req, res);
   });
 
   // MCP Messages Endpoint (POST from SSE clients)
-  app.post(['/mcp/messages', '/messages'], async (req, res) => {
+  app.post(['/mcp/messages', '/messages'], requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), async (req, res) => {
     try {
       const sessionId = (req.query.sessionId as string) || (req.headers['mcp-session-id'] as string);
       const sseRes = sessionId ? sseSessions.get(sessionId) : undefined;
@@ -162,7 +165,7 @@ async function startServer() {
     }
   });
 
-  app.post('/mcp', async (req, res) => {
+  app.post('/mcp', requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), async (req, res) => {
     try {
       // Extract Bearer token from header if present
       const authHeader = req.headers.authorization;
