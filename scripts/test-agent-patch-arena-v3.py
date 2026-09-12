@@ -8,9 +8,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location(
-    "agent_patch_arena", ROOT / "scripts" / "agent-patch-arena.py"
-)
+SPEC = importlib.util.spec_from_file_location("agent_patch_arena", ROOT / "scripts" / "agent-patch-arena.py")
 assert SPEC and SPEC.loader
 module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(module)
@@ -22,7 +20,7 @@ def expect(paths: list[str], expected: str) -> None:
 
 
 def main() -> int:
-    expect([], "correctness")
+    expect([], "governance")
     expect(["bench/example.ts"], "performance")
     expect(["benchmark/example.ts"], "performance")
     expect(["src/vortex/oauth.ts"], "security")
@@ -31,10 +29,23 @@ def main() -> int:
     expect(["src/vortex/oauth.ts", "bench/example.ts"], "mixed")
     expect([".github/workflows/agent-patch-arena.yml"], "governance")
     expect(["scripts/agent-patch-arena.py"], "governance")
+    expect(["scripts/test-agent-patch-arena-v3.py"], "governance")
+    expect(["docs/patch-arena-governance-bootstrap.md"], "governance")
+    expect(["package-lock.json"], "governance")
+    expect(["scripts/__pycache__/agent-patch-arena.cpython-310.pyc"], "governance")
+    expect([
+        ".github/workflows/agent-patch-arena.yml",
+        "scripts/agent-patch-arena.py",
+        "scripts/test-agent-patch-arena-v3.py",
+        "docs/09-mcp-termux-alpine-e-execution-proofs.md",
+        "package-lock.json",
+    ], "governance")
     expect([".github/workflows/agent-patch-arena.yml", "server.ts"], "mixed")
     expect(["scripts/agent-patch-arena.py", "src/vortex/oauth.ts"], "mixed")
     expect(["bench/example.ts", "server.ts"], "mixed")
     expect(["src/vortex/oauth.ts", "server.ts"], "mixed")
+    expect(["scripts/agent-patch-arena.py", "src/unknown/new-executable.ts"], "mixed")
+    expect(["performance/new-benchmark.ts", "src/unknown/new-executable.ts"], "mixed")
 
     with tempfile.TemporaryDirectory(prefix="vortex-arena-policy-") as tmp:
         evidence = Path(tmp) / "arena-result.json"
