@@ -11,10 +11,8 @@ import argparse
 import json
 import os
 import re
-import shutil
 import statistics
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -32,16 +30,7 @@ def run(cmd: list[str], cwd: Path, timeout: int = 900) -> tuple[int, str, float]
     env = os.environ.copy()
     for key in ("GITHUB_TOKEN", "GH_TOKEN", "NODE_AUTH_TOKEN"):
         env.pop(key, None)
-    proc = subprocess.run(
-        cmd,
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    proc = subprocess.run(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout, check=False)
     return proc.returncode, proc.stdout, time.perf_counter() - started
 
 
@@ -62,11 +51,7 @@ def metric(pattern: str, output: str, cast=float) -> float:
 
 
 def benchmark_once(path: Path) -> dict[str, float]:
-    code, output, elapsed = run(
-        ["npx", "tsx", "bin/vua.js", "bench", "--iterations", str(ITERATIONS)],
-        path,
-        timeout=300,
-    )
+    code, output, elapsed = run(["npx", "tsx", "bin/vua.js", "bench", "--iterations", str(ITERATIONS)], path, timeout=300)
     if code != 0:
         raise RuntimeError(f"bench failed with exit {code}\n{output}")
     return {
@@ -95,10 +80,7 @@ def prepare(path: Path) -> list[str]:
 
 def benchmark(path: Path) -> tuple[dict[str, float], list[dict[str, float]]]:
     samples = [benchmark_once(path) for _ in range(REPEATS)]
-    return {
-        key: median([sample[key] for sample in samples])
-        for key in samples[0]
-    }, samples
+    return {key: median([sample[key] for sample in samples]) for key in samples[0]}, samples
 
 
 def main() -> int:
@@ -108,7 +90,6 @@ def main() -> int:
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    root = Path.cwd()
     with tempfile.TemporaryDirectory(prefix="vortex-arena-") as temp:
         work = Path(temp)
         base = work / "base"
@@ -123,19 +104,8 @@ def main() -> int:
                 "schema": "vortex.patch-arena.v1",
                 "base_sha": args.base,
                 "head_sha": args.head,
-                "policy": {
-                    "min_throughput_gain": MIN_THROUGHPUT_GAIN,
-                    "max_latency_regression": MAX_LATENCY_REGRESSION,
-                    "max_memory_regression": MAX_MEMORY_REGRESSION,
-                    "max_cv": MAX_CV,
-                    "repeats": REPEATS,
-                    "iterations": ITERATIONS,
-                },
-                "quality": {
-                    "base_failures": base_failures,
-                    "head_failures": head_failures,
-                    "passed": not base_failures and not head_failures,
-                },
+                "policy": {"min_throughput_gain": MIN_THROUGHPUT_GAIN, "max_latency_regression": MAX_LATENCY_REGRESSION, "max_memory_regression": MAX_MEMORY_REGRESSION, "max_cv": MAX_CV, "repeats": REPEATS, "iterations": ITERATIONS},
+                "quality": {"base_failures": base_failures, "head_failures": head_failures, "passed": not base_failures and not head_failures},
             }
 
             if base_failures or head_failures:
@@ -153,11 +123,7 @@ def main() -> int:
                 superior = throughput_gain >= MIN_THROUGHPUT_GAIN and latency_change <= MAX_LATENCY_REGRESSION and memory_change <= MAX_MEMORY_REGRESSION and stable
                 result["base"] = {"median": base_metrics, "samples": base_samples, "cv": base_cv}
                 result["head"] = {"median": head_metrics, "samples": head_samples, "cv": head_cv}
-                result["delta"] = {
-                    "throughput_gain_pct": throughput_gain * 100,
-                    "latency_change_pct": latency_change * 100,
-                    "memory_change_pct": memory_change * 100,
-                }
+                result["delta"] = {"throughput_gain_pct": throughput_gain * 100, "latency_change_pct": latency_change * 100, "memory_change_pct": memory_change * 100}
                 result["verdict"] = "PASS_SUPERIOR" if superior else "REJECT"
                 result["reason"] = "candidate meets improvement and stability policy" if superior else "candidate does not demonstrate sufficient measured gain"
 
