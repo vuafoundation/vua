@@ -1,20 +1,16 @@
 /**
  * Vortex Foundation - Execution Evidence Hash, CI Provenance & Benchmark Engine
- * 
- * Normative Requirements:
- * 1. CI-dependent Execution Evidence Hash:
- *    execution_evidence_hash = H(commit_sha + ci_run_id + ci_attempt + workflow + suite + test results + coverage + integration + execution_proofs)
- * 2. Absolute gates prior to benchmark score:
- *    - coverage < 100% -> FAIL
- *    - security FAIL -> FAIL
- *    - integration FAIL -> FAIL
- *    - proof FAIL -> FAIL
- * 3. Composite Benchmark Score formula:
- *    Score = 30% throughput + 20% p95 + 15% p99 + 15% error rate + 10% timeout rate + 10% resource efficiency
+ *
+ * Normative requirements:
+ * - benchmark baselines are dynamic, measured and environment-bound;
+ * - no normative performance number is stored in source code;
+ * - missing provenance is a hard failure;
+ * - benchmark comparison is never allowed across incompatible environments/workloads.
  */
 
 import { canonicalize } from './canonicalize.js';
 import { sha256 } from './crypto.js';
+import { readDynamicBaseline } from './benchmark-bootstrap.js';
 import type { ExecutionEvidence } from './types.js';
 
 export interface BenchmarkMetrics {
@@ -43,18 +39,28 @@ export interface BenchmarkReport {
   verdict: 'PASS_SUPERIOR' | 'PASS_ACCEPTABLE' | 'FAIL_REGRESSION' | 'BLOCKED_BY_GATES';
 }
 
-export const BASELINE_METRICS: BenchmarkMetrics = {
-  rps: 850,
-  p50_ms: 1.2,
-  p95_ms: 4.8,
-  p99_ms: 12.5,
-  error_rate_pct: 0.0,
-  timeout_rate_pct: 0.0,
-  memory_efficiency_pct: 95.0,
-};
+/**
+ * Compatibility surface for callers that still import BASELINE_METRICS.
+ * Values are resolved lazily from the measured dynamic baseline; there is no
+ * static fallback. Missing/incompatible baseline throws and therefore fails closed.
+ */
+export const BASELINE_METRICS = Object.defineProperties({} as BenchmarkMetrics, {
+  rps: { enumerable: true, get: () => readDynamicBaseline().metrics.rps },
+  p50_ms: { enumerable: true, get: () => readDynamicBaseline().metrics.p50_ms },
+  p95_ms: { enumerable: true, get: () => readDynamicBaseline().metrics.p95_ms },
+  p99_ms: { enumerable: true, get: () => readDynamicBaseline().metrics.p99_ms },
+  error_rate_pct: { enumerable: true, get: () => readDynamicBaseline().metrics.error_rate_pct },
+  timeout_rate_pct: { enumerable: true, get: () => readDynamicBaseline().metrics.timeout_rate_pct },
+  memory_efficiency_pct: { enumerable: true, get: () => readDynamicBaseline().metrics.memory_efficiency_pct },
+});
+
+export function getDynamicBaseline(): BenchmarkMetrics {
+  return readDynamicBaseline().metrics;
+}
 
 /**
- * Computes deterministic Execution Evidence Hash
+ * Computes deterministic Execution Evidence Hash.
+ * CI identity is mandatory; there are no hardcoded commit/run fallbacks.
  */
 export function generateExecutionEvidence(params: {
   commitSha?: string;
@@ -64,29 +70,32 @@ export function generateExecutionEvidence(params: {
   allTestsPassed: boolean;
   coveragePercent?: number;
 }): ExecutionEvidence {
-  const commit_sha = params.commitSha || '856920785b8392b036211cc851e1f6467961ff52';
-  const ci_run_id = params.ciRunId || '34228487367';
-  const ci_attempt = params.ciRunAttempt || '1';
+  if (!params.commitSha) throw new Error('Execution evidence requires commit SHA');
+  if (!params.ciRunId) throw new Error('Execution evidence requires CI run ID');
+  if (!params.ciRunAttempt) throw new Error('Execution evidence requires CI run attempt');
+  if (params.coveragePercent === undefined || !Number.isFinite(params.coveragePercent)) {
+    throw new Error('Execution evidence requires measured coverage percentage');
+  }
 
   const rawEvidence: Omit<ExecutionEvidence, 'canonical_hash'> = {
     schema: 'vortex-execution-evidence/v1',
     module: 'foundation-integration',
-    commit_sha,
+    commit_sha: params.commitSha,
     ci: {
       provider: 'github-actions',
-      run_id: ci_run_id,
-      run_attempt: ci_attempt,
+      run_id: params.ciRunId,
+      run_attempt: params.ciRunAttempt,
       workflow: 'vortex-foundation-ci.yml',
     },
     suite: {
       name: 'vortex-foundation-conformance',
-      version: '1.0.0',
-      source_hash: sha256('vortex-mcp-spec-foundation-v1'),
+      version: '2.0.0',
+      source_hash: sha256('vortex-mcp-spec-foundation-v2'),
     },
     result: {
       build: 'PASS',
       tests: params.allTestsPassed ? 'PASS' : 'FAIL',
-      coverage: `${params.coveragePercent || 100}%`,
+      coverage: `${params.coveragePercent}%`,
       integration: params.allTestsPassed ? 'PASS' : 'FAIL',
       security: params.allTestsPassed ? 'PASS' : 'FAIL',
       stress: 'PASS',
@@ -99,57 +108,39 @@ export function generateExecutionEvidence(params: {
   const canonical = canonicalize(rawEvidence);
   const canonical_hash = sha256(canonical);
 
-  return {
-    ...rawEvidence,
-    canonical_hash,
-  };
+  return { ...rawEvidence, canonical_hash };
 }
 
-/**
- * Calculates Composite Foundation Benchmark Score
- */
 export function calculateBenchmarkScore(m: BenchmarkMetrics): number {
-  // Higher throughput is better (scaled), lower latency is better, lower error is better
   const throughputScore = Math.min(100, (m.rps / 1000) * 100) * 0.30;
   const p95Score = Math.max(0, 100 - m.p95_ms * 5) * 0.20;
   const p99Score = Math.max(0, 100 - m.p99_ms * 3) * 0.15;
   const errorScore = Math.max(0, 100 - m.error_rate_pct * 50) * 0.15;
   const timeoutScore = Math.max(0, 100 - m.timeout_rate_pct * 50) * 0.10;
   const memoryScore = m.memory_efficiency_pct * 0.10;
-
   return Math.round((throughputScore + p95Score + p99Score + errorScore + timeoutScore + memoryScore) * 10) / 10;
 }
 
-/**
- * Evaluates the full Foundation Benchmark Gate
- */
 export function evaluateBenchmarkGate(
   current: BenchmarkMetrics,
-  gatesPassed: { coverage: boolean; security: boolean; integration: boolean; proof: boolean }
+  gatesPassed: { coverage: boolean; security: boolean; integration: boolean; proof: boolean },
+  baseline: BenchmarkMetrics = getDynamicBaseline(),
 ): BenchmarkReport {
   const allAbsoluteGates =
-    gatesPassed.coverage &&
-    gatesPassed.security &&
-    gatesPassed.integration &&
-    gatesPassed.proof;
+    gatesPassed.coverage && gatesPassed.security && gatesPassed.integration && gatesPassed.proof;
 
-  const scoreBaseline = calculateBenchmarkScore(BASELINE_METRICS);
+  const scoreBaseline = calculateBenchmarkScore(baseline);
   const scoreCurrent = calculateBenchmarkScore(current);
 
   let verdict: BenchmarkReport['verdict'] = 'BLOCKED_BY_GATES';
-  if (!allAbsoluteGates) {
-    verdict = 'BLOCKED_BY_GATES';
-  } else if (scoreCurrent > scoreBaseline) {
-    verdict = 'PASS_SUPERIOR';
-  } else if (scoreCurrent >= scoreBaseline * 0.95) {
-    verdict = 'PASS_ACCEPTABLE';
-  } else {
-    verdict = 'FAIL_REGRESSION';
-  }
+  if (!allAbsoluteGates) verdict = 'BLOCKED_BY_GATES';
+  else if (scoreCurrent > scoreBaseline) verdict = 'PASS_SUPERIOR';
+  else if (scoreCurrent >= scoreBaseline * 0.95) verdict = 'PASS_ACCEPTABLE';
+  else verdict = 'FAIL_REGRESSION';
 
   return {
     timestamp: new Date().toISOString(),
-    baseline: BASELINE_METRICS,
+    baseline,
     current,
     gates: {
       coverage_100_percent: gatesPassed.coverage,
