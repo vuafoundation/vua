@@ -16,6 +16,8 @@
     "lint": "tsc --noEmit",
     "test": "tsx scripts/run-full-suite.ts",
     "test:threads": "tsx scripts/test-threads.ts",
+    "test:oauth": "tsx scripts/test-oauth.ts",
+    "test:policy-approval": "tsx scripts/test-policy-approval.ts",
     "verify:gos3": "tsx scripts/verify-gos3-headers.ts --strict",
     "vua": "tsx bin/vua.js",
     "bench": "tsx bin/vua.js bench",

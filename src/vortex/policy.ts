@@ -267,9 +267,7 @@ export function evaluatePolicy(
 
   const hasValidApproval =
     approvalToken === 'vortex-approved-human' ||
-    approvalToken === 'appr-token-verified' ||
-    approvalToken?.startsWith('approval-') ||
-    approvalToken?.startsWith('appr-');
+    approvalToken === 'appr-token-verified';
 
   if (needsApproval && !hasValidApproval) {
     return {
