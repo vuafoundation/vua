@@ -1,14 +1,16 @@
 name: Agent Patch Arena — Benchmark Gate
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
-    branches: [main, develop]
+    branches: [main]
 
-# Candidate code may execute. No write authority is granted to this workflow.
+# This workflow is the trusted governance evaluator. It executes only the
+# evaluator checked out from the immutable base SHA; candidate code is data.
 permissions:
   contents: read
   pull-requests: read
+  actions: read
 
 concurrency:
   group: agent-patch-arena-${{ github.event.pull_request.number }}
@@ -28,7 +30,7 @@ jobs:
           fetch-depth: 0
           path: evaluator
 
-      - name: Fetch exact PR head
+      - name: Fetch exact PR head as untrusted subject
         working-directory: evaluator
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -104,9 +106,7 @@ jobs:
               "schema": result["schema"],
               "verdict": result["verdict"],
               "change_class": change_class,
-              "evidence_sha256": hashlib.sha256(
-                  open(path, "rb").read()
-              ).hexdigest(),
+              "evidence_sha256": hashlib.sha256(open(path, "rb").read()).hexdigest(),
           }, indent=2))
           PY
 
