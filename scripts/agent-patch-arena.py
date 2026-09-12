@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """Vortex Agent Patch Arena evaluator.
 
-This evaluator treats every proposed patch as untrusted and compares it with the
-exact base revision under the same workload. The verdict is evidence-based:
-absolute quality gates first, then robust performance comparison.
+Every proposed patch is untrusted and is compared with the exact base revision
+under the same workload. The evaluator first applies absolute quality gates,
+then a policy appropriate to the type of change:
+
+* performance: requires a measured throughput improvement;
+* security/correctness: requires quality plus bounded, non-material regression.
+
+Classification is derived from the trusted base evaluator, never from files
+modified by the candidate to weaken the gate.
 """
 from __future__ import annotations
 
@@ -20,9 +26,23 @@ from pathlib import Path
 ITERATIONS = 1000
 REPEATS = 5
 MIN_THROUGHPUT_GAIN = 0.05
+MAX_THROUGHPUT_REGRESSION = 0.02
 MAX_LATENCY_REGRESSION = 0.02
 MAX_MEMORY_REGRESSION = 0.05
 MAX_CV = 0.10
+
+SECURITY_PATHS = (
+    "src/vortex/oauth.ts",
+    "src/security/",
+    "src/auth/",
+    ".github/workflows/",
+)
+PERFORMANCE_PATHS = (
+    "bench/",
+    "benchmark/",
+    "performance/",
+    "scripts/agent-patch-arena.py",
+)
 
 
 def run(cmd: list[str], cwd: Path, timeout: int = 900) -> tuple[int, str, float]:
@@ -30,7 +50,16 @@ def run(cmd: list[str], cwd: Path, timeout: int = 900) -> tuple[int, str, float]
     env = os.environ.copy()
     for key in ("GITHUB_TOKEN", "GH_TOKEN", "NODE_AUTH_TOKEN"):
         env.pop(key, None)
-    proc = subprocess.run(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout, check=False)
+    proc = subprocess.run(
+        cmd,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
     return proc.returncode, proc.stdout, time.perf_counter() - started
 
 
@@ -51,7 +80,11 @@ def metric(pattern: str, output: str, cast=float) -> float:
 
 
 def benchmark_once(path: Path) -> dict[str, float]:
-    code, output, elapsed = run(["npx", "tsx", "bin/vua.js", "bench", "--iterations", str(ITERATIONS)], path, timeout=300)
+    code, output, elapsed = run(
+        ["npx", "tsx", "bin/vua.js", "bench", "--iterations", str(ITERATIONS)],
+        path,
+        timeout=300,
+    )
     if code != 0:
         raise RuntimeError(f"bench failed with exit {code}\n{output}")
     return {
@@ -83,12 +116,40 @@ def benchmark(path: Path) -> tuple[dict[str, float], list[dict[str, float]]]:
     return {key: median([sample[key] for sample in samples]) for key in samples[0]}, samples
 
 
+def changed_files(repo: Path, base_sha: str, head_sha: str) -> list[str]:
+    code, output, _ = run(["git", "diff", "--name-only", base_sha, head_sha], repo, timeout=120)
+    if code != 0:
+        raise RuntimeError(f"unable to determine changed files\n{output}")
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _matches(path: str, patterns: tuple[str, ...]) -> bool:
+    return any(path == pattern or path.startswith(pattern) for pattern in patterns)
+
+
+def classify_change(paths: list[str]) -> str:
+    """Classify from trusted repository paths; mixed security/performance fails closed."""
+    has_security = any(_matches(path, SECURITY_PATHS) for path in paths)
+    has_performance = any(_matches(path, PERFORMANCE_PATHS) for path in paths)
+    if has_security and has_performance:
+        return "mixed"
+    if has_performance:
+        return "performance"
+    if has_security:
+        return "security"
+    return "correctness"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
+
+    repo = Path.cwd()
+    paths = changed_files(repo, args.base, args.head)
+    change_class = classify_change(paths)
 
     with tempfile.TemporaryDirectory(prefix="vortex-arena-") as temp:
         work = Path(temp)
@@ -101,11 +162,25 @@ def main() -> int:
             base_failures = prepare(base)
             head_failures = prepare(head)
             result: dict = {
-                "schema": "vortex.patch-arena.v1",
+                "schema": "vortex.patch-arena.v2",
                 "base_sha": args.base,
                 "head_sha": args.head,
-                "policy": {"min_throughput_gain": MIN_THROUGHPUT_GAIN, "max_latency_regression": MAX_LATENCY_REGRESSION, "max_memory_regression": MAX_MEMORY_REGRESSION, "max_cv": MAX_CV, "repeats": REPEATS, "iterations": ITERATIONS},
-                "quality": {"base_failures": base_failures, "head_failures": head_failures, "passed": not base_failures and not head_failures},
+                "change_class": change_class,
+                "changed_files": paths,
+                "policy": {
+                    "min_throughput_gain": MIN_THROUGHPUT_GAIN,
+                    "max_throughput_regression": MAX_THROUGHPUT_REGRESSION,
+                    "max_latency_regression": MAX_LATENCY_REGRESSION,
+                    "max_memory_regression": MAX_MEMORY_REGRESSION,
+                    "max_cv": MAX_CV,
+                    "repeats": REPEATS,
+                    "iterations": ITERATIONS,
+                },
+                "quality": {
+                    "base_failures": base_failures,
+                    "head_failures": head_failures,
+                    "passed": not base_failures and not head_failures,
+                },
             }
 
             if base_failures or head_failures:
@@ -120,16 +195,49 @@ def main() -> int:
                 base_cv = coefficient_of_variation([s["throughput_ops_s"] for s in base_samples])
                 head_cv = coefficient_of_variation([s["throughput_ops_s"] for s in head_samples])
                 stable = max(base_cv, head_cv) <= MAX_CV
-                superior = throughput_gain >= MIN_THROUGHPUT_GAIN and latency_change <= MAX_LATENCY_REGRESSION and memory_change <= MAX_MEMORY_REGRESSION and stable
+                performance_ok = (
+                    throughput_gain >= MIN_THROUGHPUT_GAIN
+                    and latency_change <= MAX_LATENCY_REGRESSION
+                    and memory_change <= MAX_MEMORY_REGRESSION
+                    and stable
+                )
+                no_regression_ok = (
+                    throughput_gain >= -MAX_THROUGHPUT_REGRESSION
+                    and latency_change <= MAX_LATENCY_REGRESSION
+                    and memory_change <= MAX_MEMORY_REGRESSION
+                    and stable
+                )
+                if change_class == "performance":
+                    passed = performance_ok
+                    verdict = "PASS_SUPERIOR" if passed else "REJECT"
+                    reason = "candidate meets performance improvement and stability policy" if passed else "candidate does not demonstrate sufficient measured gain"
+                elif change_class in {"security", "correctness"}:
+                    passed = no_regression_ok
+                    verdict = "PASS_NO_REGRESSION" if passed else "REJECT"
+                    reason = "candidate meets quality and bounded no-regression policy" if passed else "candidate exceeds bounded regression policy"
+                else:
+                    passed = False
+                    verdict = "REJECT"
+                    reason = "mixed security/performance change requires explicit benchmark review"
+
                 result["base"] = {"median": base_metrics, "samples": base_samples, "cv": base_cv}
                 result["head"] = {"median": head_metrics, "samples": head_samples, "cv": head_cv}
-                result["delta"] = {"throughput_gain_pct": throughput_gain * 100, "latency_change_pct": latency_change * 100, "memory_change_pct": memory_change * 100}
-                result["verdict"] = "PASS_SUPERIOR" if superior else "REJECT"
-                result["reason"] = "candidate meets improvement and stability policy" if superior else "candidate does not demonstrate sufficient measured gain"
+                result["delta"] = {
+                    "throughput_gain_pct": throughput_gain * 100,
+                    "latency_change_pct": latency_change * 100,
+                    "memory_change_pct": memory_change * 100,
+                }
+                result["gates"] = {
+                    "performance_ok": performance_ok,
+                    "no_regression_ok": no_regression_ok,
+                    "stable": stable,
+                }
+                result["verdict"] = verdict
+                result["reason"] = reason
 
             Path(args.output).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
             print(json.dumps(result, indent=2))
-            return 0 if result["verdict"] == "PASS_SUPERIOR" else 1
+            return 0 if result["verdict"] in {"PASS_SUPERIOR", "PASS_NO_REGRESSION"} else 1
         finally:
             for target in (head, base):
                 subprocess.run(["git", "worktree", "remove", "--force", str(target)], check=False)
