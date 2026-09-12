@@ -3,10 +3,12 @@
 
 Every proposed patch is untrusted and is compared with the exact base revision
 under the same workload. The evaluator first applies absolute quality gates,
-then a policy appropriate to the type of change:
+then a policy appropriate to the type of change.
 
 * performance: requires a measured throughput improvement;
-* security/correctness: requires quality plus bounded, non-material regression.
+* security/correctness: requires quality plus bounded, non-material regression;
+* governance: changes to this evaluator/policy require bounded no-regression and
+  normal protected-branch review; they never self-authorize a merge.
 
 Classification is derived from the trusted base evaluator, never from files
 modified by the candidate to weaken the gate.
@@ -31,17 +33,20 @@ MAX_LATENCY_REGRESSION = 0.02
 MAX_MEMORY_REGRESSION = 0.05
 MAX_CV = 0.10
 
+GOVERNANCE_PATHS = (
+    ".github/workflows/agent-patch-arena.yml",
+    "scripts/agent-patch-arena.py",
+    "scripts/test-agent-patch-arena-policy.py",
+)
 SECURITY_PATHS = (
     "src/vortex/oauth.ts",
     "src/security/",
     "src/auth/",
-    ".github/workflows/",
 )
 PERFORMANCE_PATHS = (
     "bench/",
     "benchmark/",
     "performance/",
-    "scripts/agent-patch-arena.py",
 )
 
 
@@ -128,9 +133,15 @@ def _matches(path: str, patterns: tuple[str, ...]) -> bool:
 
 
 def classify_change(paths: list[str]) -> str:
-    """Classify from trusted repository paths; mixed security/performance fails closed."""
+    """Classify from trusted repository paths; policy changes fail closed with mixed code."""
+    has_governance = any(_matches(path, GOVERNANCE_PATHS) for path in paths)
     has_security = any(_matches(path, SECURITY_PATHS) for path in paths)
     has_performance = any(_matches(path, PERFORMANCE_PATHS) for path in paths)
+
+    if has_governance:
+        if has_security or has_performance:
+            return "mixed"
+        return "governance"
     if has_security and has_performance:
         return "mixed"
     if has_performance:
@@ -162,7 +173,7 @@ def main() -> int:
             base_failures = prepare(base)
             head_failures = prepare(head)
             result: dict = {
-                "schema": "vortex.patch-arena.v2",
+                "schema": "vortex.patch-arena.v3",
                 "base_sha": args.base,
                 "head_sha": args.head,
                 "change_class": change_class,
@@ -207,6 +218,7 @@ def main() -> int:
                     and memory_change <= MAX_MEMORY_REGRESSION
                     and stable
                 )
+
                 if change_class == "performance":
                     passed = performance_ok
                     verdict = "PASS_SUPERIOR" if passed else "REJECT"
@@ -215,10 +227,14 @@ def main() -> int:
                     passed = no_regression_ok
                     verdict = "PASS_NO_REGRESSION" if passed else "REJECT"
                     reason = "candidate meets quality and bounded no-regression policy" if passed else "candidate exceeds bounded regression policy"
+                elif change_class == "governance":
+                    passed = no_regression_ok
+                    verdict = "PASS_GOVERNANCE" if passed else "REJECT"
+                    reason = "governance change passes quality and bounded no-regression policy; protected-branch review remains mandatory" if passed else "governance change exceeds bounded regression policy"
                 else:
                     passed = False
                     verdict = "REJECT"
-                    reason = "mixed security/performance change requires explicit benchmark review"
+                    reason = "mixed governance/security/performance change requires explicit review"
 
                 result["base"] = {"median": base_metrics, "samples": base_samples, "cv": base_cv}
                 result["head"] = {"median": head_metrics, "samples": head_samples, "cv": head_cv}
@@ -237,7 +253,7 @@ def main() -> int:
 
             Path(args.output).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
             print(json.dumps(result, indent=2))
-            return 0 if result["verdict"] in {"PASS_SUPERIOR", "PASS_NO_REGRESSION"} else 1
+            return 0 if result["verdict"] in {"PASS_SUPERIOR", "PASS_NO_REGRESSION", "PASS_GOVERNANCE"} else 1
         finally:
             for target in (head, base):
                 subprocess.run(["git", "worktree", "remove", "--force", str(target)], check=False)
