@@ -16,6 +16,8 @@ Bem-vindo à documentação técnica do **VUA (Vortex Universal Connector)** —
 | [**06. Agent Patch Arena CI Gate**](./06-agent-patch-arena-ci.md) | Arena Darwiniana e governança de patches | Pipeline de benchmark estatístico, critérios PASS_SUPERIOR (CV <= 10%, Delta >= +5%), isolamento pull_request_target |
 | [**07. Conectores e Adaptadores Disponíveis**](./07-conectores-e-adaptadores.md) | Catálogo técnico de Conectores e Adaptadores | Conectores de infraestrutura (filesystem, runtime, MCP, LLM) e adaptadores de SO (github, linux, android, windows, canary) |
 | [**08. Conectar ao Claude App**](./08-conectar-ao-claude-app.md) | Guia passo a passo para o Claude (Mobile/Desktop) | Configuração do conector personalizado, preenchimento de campos e uso das ferramentas |
+| [**09. Sprint de Prompt Engineering e Código Verificável**](./09-sprint-prompt-engineering-codigo-verificavel.md) | Plano de dez dias para transformar requisitos em mudanças reproduzíveis | Escopo, backlog, matriz de rastreabilidade, gates e definição de pronto |
+| [**10. Contrato de Prompts Verificáveis**](./10-contrato-de-prompts-verificaveis.md) | Formato padrão para tarefas de engenharia executáveis e auditáveis | Contexto, ameaças, invariantes, aceite, verificação e evidência |
 
 ---
 
