@@ -6,9 +6,7 @@ on:
       - fix/p0-mcp-verify-claude-oauth
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
 
 jobs:
   apply:
@@ -18,18 +16,8 @@ jobs:
         with:
           ref: fix/p0-mcp-verify-claude-oauth
           fetch-depth: 0
-      - name: Apply production patch
-        run: |
-          python3 scripts/apply-p0-production-fix.py
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('src/vortex/mcp-server.ts')
-          s=p.read_text()
-          s=s.replace("const proof = args.input?.execution_proof as any;","const input = (args.input as Record<string, unknown> | undefined) || {};\n      const proof = input.execution_proof as any;")
-          s=s.replace("typeof args.input?.expected_hash === 'string' ? args.input.expected_hash : undefined","typeof input.expected_hash === 'string' ? input.expected_hash : undefined")
-          p.write_text(s)
-          PY
-      - name: Validate
+
+      - name: Validate source
         run: |
           set -e
           npm ci
@@ -37,33 +25,3 @@ jobs:
           npm run build
           npx tsx scripts/test-mcp-verify-tamper.ts
           node --check dist/server.cjs
-      - name: Publish validated source snapshots
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          for path in src/vortex/oauth.ts src/vortex/verifier.ts src/vortex/gateway.ts src/vortex/mcp-server.ts server.ts scripts/test-mcp-verify-tamper.ts; do
-            title="P0 source snapshot: $path"
-            body_file="/tmp/body.txt"
-            { printf 'Automated validated source snapshot for `%s`.\n\n```text\n' "$path"; cat "$path"; printf '\n```\n'; } > "$body_file"
-            gh issue create --title "$title" --body-file "$body_file" --label ci >/dev/null
-          done
-      - name: Publish production PR through GitHub API
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          BRANCH="fix/p0-mcp-verify-claude-oauth-${GITHUB_RUN_ID}"
-          BASE_SHA="$(gh api repos/${GITHUB_REPOSITORY}/git/ref/heads/main --jq '.object.sha')"
-          gh api --method POST repos/${GITHUB_REPOSITORY}/git/refs -f ref="refs/heads/${BRANCH}" -f sha="${BASE_SHA}"
-          update_file() {
-            local path="$1"; local message="$2"; local content; content="$(base64 -w0 "$path")"; local existing_sha; existing_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=${BRANCH}" --jq '.sha' 2>/dev/null || true)";
-            if [ -n "$existing_sha" ]; then gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" -f message="$message" -f content="$content" -f branch="$BRANCH" -f sha="$existing_sha" >/dev/null; else gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" -f message="$message" -f content="$content" -f branch="$BRANCH" >/dev/null; fi
-          }
-          update_file src/vortex/oauth.ts 'fix(auth): add MCP OAuth 2.1 PKCE resource protection'
-          update_file src/vortex/verifier.ts 'fix(security): bind ExecutionProof proof_hash to canonical payload'
-          update_file src/vortex/gateway.ts 'fix(security): route vortex.verify through independent verifier'
-          update_file src/vortex/mcp-server.ts 'fix(mcp): enforce independent proof verification'
-          update_file server.ts 'fix(auth): protect MCP HTTP routes with OAuth when enabled'
-          update_file scripts/test-mcp-verify-tamper.ts 'test(security): reject tampered MCP execution proofs'
-          gh pr create --base main --head "$BRANCH" --title 'fix(security): harden MCP proof verification and Claude OAuth' --body 'P0 fix validated by lint, production build, MCP tamper regression and node syntax checks. Adds OAuth discovery/PKCE and independent proof verification.'
