@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   apply:
@@ -18,7 +19,9 @@ jobs:
           fetch-depth: 0
       - name: Apply patch
         run: python3 scripts/apply-p0-production-fix.py
-      - name: Validate and capture diagnostics
+      - name: Validate and publish diagnostics
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set +e
           rm -f /tmp/p0-validation.log
@@ -37,11 +40,17 @@ jobs:
           echo '=== node syntax ===' >> /tmp/p0-validation.log
           node --check dist/server.cjs >> /tmp/p0-validation.log 2>&1
           echo "EXIT=$?" >> /tmp/p0-validation.log
-          cp /tmp/p0-validation.log docs/p0-validation.log
-      - name: Commit patch and diagnostics
-        run: |
-          git config user.name 'vua-ci'
-          git config user.email 'vua-ci@users.noreply.github.com'
-          git add src/vortex/oauth.ts src/vortex/verifier.ts src/vortex/gateway.ts src/vortex/mcp-server.ts server.ts scripts/test-mcp-verify-tamper.ts docs/p0-validation.log
-          git diff --cached --quiet || git commit -m 'ci(auth): apply P0 production patch'
-          git push origin HEAD:fix/p0-mcp-verify-claude-oauth
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          log=Path('/tmp/p0-validation.log').read_text()[-60000:]
+          body='Automated P0 production-fix diagnostics for branch `fix/p0-mcp-verify-claude-oauth`.\n\n```text\n'+log+'\n```'
+          import urllib.request
+          data=json.dumps({'title':'P0 validation diagnostics','body':body,'labels':['ci']}).encode()
+          req=urllib.request.Request('https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+'/issues',data=data,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'},method='POST')
+          try:
+            with urllib.request.urlopen(req) as r: print(r.read().decode())
+          except Exception as e: print('diagnostic issue creation failed:',e)
+          PY
+      - name: Stop after diagnostics
+        run: exit 0
