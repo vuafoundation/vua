@@ -1,14 +1,14 @@
 name: Agent Patch Arena — Benchmark Gate
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main]
+    branches: [main, develop]
 
+# Candidate code may execute. No write authority is granted to this workflow.
 permissions:
   contents: read
   pull-requests: read
-  actions: read
 
 concurrency:
   group: agent-patch-arena-${{ github.event.pull_request.number }}
@@ -16,16 +16,28 @@ concurrency:
 
 jobs:
   arena:
-    name: Trusted benchmark comparison
+    name: Trusted-base benchmark comparison
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
     steps:
-      - name: Checkout trusted base repository
+      - name: Checkout trusted base evaluator
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           path: evaluator
+
+      - name: Fetch exact PR head
+        working-directory: evaluator
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            "+refs/pull/${PR_NUMBER}/head:refs/remotes/origin/pr-${PR_NUMBER}"
+          git cat-file -e "${HEAD_SHA}^{commit}"
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -34,13 +46,7 @@ jobs:
           cache: npm
           cache-dependency-path: evaluator/package-lock.json
 
-      - name: Verify candidate is reachable
-        working-directory: evaluator
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: git cat-file -e "$HEAD_SHA^{commit}"
-
-      - name: Run trusted Patch Arena
+      - name: Run trusted Patch Arena v3
         working-directory: evaluator
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -51,6 +57,59 @@ jobs:
             --head "$HEAD_SHA" \
             --output "$GITHUB_WORKSPACE/arena-result.json"
 
+      - name: Validate v3 evidence invariants
+        working-directory: evaluator
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - "$GITHUB_WORKSPACE/arena-result.json" <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as f:
+              result = json.load(f)
+
+          if result.get("schema") != "vortex.patch-arena.v3":
+              raise SystemExit("invalid Arena schema")
+          if result.get("base_sha") != os.environ["BASE_SHA"]:
+              raise SystemExit("base SHA mismatch")
+          if result.get("head_sha") != os.environ["HEAD_SHA"]:
+              raise SystemExit("head SHA mismatch")
+          if result.get("trusted_base") is not True:
+              raise SystemExit("trusted-base invariant failed")
+          if result.get("change_class") == "mixed":
+              raise SystemExit("mixed change must fail closed")
+          if result.get("quality", {}).get("passed") is not True:
+              raise SystemExit("quality gates failed")
+
+          allowed = {
+              "performance": "PASS_SUPERIOR",
+              "security": "PASS_NO_REGRESSION",
+              "correctness": "PASS_NO_REGRESSION",
+              "governance": "PASS_GOVERNANCE",
+          }
+          change_class = result.get("change_class")
+          if result.get("verdict") != allowed.get(change_class):
+              raise SystemExit(
+                  f"verdict {result.get('verdict')!r} is invalid for "
+                  f"change class {change_class!r}"
+              )
+
+          print(json.dumps({
+              "valid": True,
+              "schema": result["schema"],
+              "verdict": result["verdict"],
+              "change_class": change_class,
+              "evidence_sha256": hashlib.sha256(
+                  open(path, "rb").read()
+              ).hexdigest(),
+          }, indent=2))
+          PY
+
       - name: Publish benchmark evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -58,15 +117,3 @@ jobs:
           name: agent-patch-arena-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           path: arena-result.json
           retention-days: 30
-
-      - name: Enforce Arena verdict
-        run: |
-          python3 - <<'PY'
-          import json
-          with open('arena-result.json', encoding='utf-8') as f:
-              result = json.load(f)
-          print('Arena verdict:', result.get('verdict'))
-          print('Reason:', result.get('reason'))
-          if result.get('verdict') != 'PASS_SUPERIOR':
-              raise SystemExit(1)
-          PY
