@@ -2,7 +2,8 @@ name: apply-p0-production-fix
 
 on:
   push:
-    branches: [fix/p0-mcp-verify-claude-oauth]
+    branches:
+      - fix/p0-mcp-verify-claude-oauth
 
 permissions:
   contents: write
@@ -16,211 +17,8 @@ jobs:
         with:
           ref: fix/p0-mcp-verify-claude-oauth
           fetch-depth: 0
-
-      - name: Patch production verifier, MCP boundary and OAuth
-        env:
-          OAUTH_TS: |
-            /**
-             * VUA — Vortex Universal Connector
-             * Module: OAuth 2.1 Authorization + MCP Resource Protection
-             *
-             * Responsibility: OAuth Authorization Code + PKCE S256, RFC 9728
-             * protected-resource metadata, RFC 8414 authorization-server metadata,
-             * RFC 7591 dynamic client registration, RFC 8707 resource binding,
-             * and Bearer authentication at the MCP HTTP boundary.
-             *
-             * OAuth authentication is NOT execution authorization.
-             * OAuth token != approval_token != ExecutionProof.
-             *
-             * Storage is intentionally in-memory for local/single-instance use.
-             * Production multi-instance deployments MUST replace these Maps with
-             * shared durable storage before horizontal scaling.
-             */
-            import crypto from 'node:crypto';
-            import type { Express, NextFunction, Request, Response } from 'express';
-
-            type Client = { client_id: string; redirect_uris: string[]; client_name?: string };
-            type Code = { client_id: string; redirect_uri: string; code_challenge: string; scope: string; resource: string; expires_at: number; used: boolean };
-            type Token = { client_id: string; scope: string; resource: string; expires_at: number };
-
-            const clients = new Map<string, Client>();
-            const codes = new Map<string, Code>();
-            const tokens = new Map<string, Token>();
-            const attempts = new Map<string, { count: number; resetAt: number }>();
-            const CODE_TTL = 5 * 60_000;
-            const TOKEN_TTL = 3600;
-            const RATE_WINDOW = 15 * 60_000;
-            const RATE_MAX = 5;
-
-            const randomToken = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
-            const pkce = (v: string) => crypto.createHash('sha256').update(v, 'utf8').digest('base64url');
-            const equal = (a: string, b: string) => { const x = Buffer.from(a); const y = Buffer.from(b); return x.length === y.length && crypto.timingSafeEqual(x, y); };
-            const html = (v: string) => v.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
-            const base = (req: Request, configured?: string) => (configured || `${req.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-            const resource = (baseUrl: string) => `${baseUrl.replace(/\/$/,'')}/mcp`;
-
-            function rateLimit(ip: string): boolean {
-              const now = Date.now(); const old = attempts.get(ip);
-              if (!old || old.resetAt <= now) { attempts.set(ip, { count: 1, resetAt: now + RATE_WINDOW }); return true; }
-              if (old.count >= RATE_MAX) return false; old.count += 1; return true;
-            }
-
-            setInterval(() => {
-              const now = Date.now();
-              for (const [k,v] of codes) if (v.expires_at <= now) codes.delete(k);
-              for (const [k,v] of tokens) if (v.expires_at <= now) tokens.delete(k);
-              for (const [k,v] of attempts) if (v.resetAt <= now) attempts.delete(k);
-            }, 60_000).unref();
-
-            export function mountOAuth(app: Express, opts?: { publicBaseUrl?: string }): void {
-              const configured = opts?.publicBaseUrl?.replace(/\/$/,'');
-              app.get('/.well-known/oauth-protected-resource', (req,res) => {
-                const b = base(req, configured); res.json({ resource: resource(b), authorization_servers: [b], scopes_supported: ['mcp'], bearer_methods_supported: ['header'] });
-              });
-              app.get('/.well-known/oauth-authorization-server', (req,res) => {
-                const b = base(req, configured); res.json({ issuer:b, authorization_endpoint:`${b}/oauth/authorize`, token_endpoint:`${b}/oauth/token`, registration_endpoint:`${b}/oauth/register`, response_types_supported:['code'], grant_types_supported:['authorization_code'], code_challenge_methods_supported:['S256'], token_endpoint_auth_methods_supported:['none'], scopes_supported:['mcp'] });
-              });
-              app.post('/oauth/register', (req,res) => {
-                const uris = req.body?.redirect_uris;
-                if (!Array.isArray(uris) || !uris.length || uris.length > 20) return res.status(400).json({ error:'invalid_client_metadata' });
-                if (!uris.every((u:unknown) => { if (typeof u !== 'string' || u.length > 2048) return false; try { return new URL(u).protocol === 'https:'; } catch { return false; } })) return res.status(400).json({ error:'invalid_client_metadata', error_description:'HTTPS redirect_uris required' });
-                const client_id = `vua-client-${randomToken(18)}`;
-                clients.set(client_id,{ client_id, redirect_uris:uris, client_name:typeof req.body?.client_name === 'string' ? req.body.client_name.slice(0,200) : undefined });
-                return res.status(201).json({ client_id, client_name:clients.get(client_id)?.client_name || 'VUA MCP Client', redirect_uris:uris, grant_types:['authorization_code'], response_types:['code'], token_endpoint_auth_method:'none' });
-              });
-              app.get('/oauth/authorize', (req,res) => {
-                const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state } = req.query;
-                const scope = typeof req.query.scope === 'string' ? req.query.scope : 'mcp';
-                const requestedResource = typeof req.query.resource === 'string' ? req.query.resource : '';
-                if (response_type !== 'code' || typeof client_id !== 'string' || typeof redirect_uri !== 'string' || typeof code_challenge !== 'string' || code_challenge_method !== 'S256') return res.status(400).send('Invalid OAuth authorization request');
-                const client = clients.get(client_id); if (!client || !client.redirect_uris.includes(redirect_uri)) return res.status(400).send('Invalid client or redirect_uri');
-                const b = base(req,configured); const expected = resource(b); if (requestedResource && requestedResource !== expected) return res.status(400).send('Invalid resource');
-                const form = new URL('/oauth/approve', b); for (const [k,v] of Object.entries({client_id,redirect_uri,code_challenge,scope,resource:expected,state:typeof state === 'string' ? state : ''})) form.searchParams.set(k,v);
-                return res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Autorizar VUA</title><style>body{font-family:system-ui,sans-serif;max-width:480px;margin:4rem auto;padding:1rem}input,button{width:100%;padding:.8rem;margin-top:.8rem;box-sizing:border-box}button{cursor:pointer}</style></head><body><h1>Autorizar VUA</h1><p>O cliente <strong>${html(client.client_name || client_id)}</strong> solicita acesso ao MCP VUA.</p><p>Escopo: <code>${html(scope)}</code></p><form method="post" action="${html(form.pathname)}"><input type="hidden" name="client_id" value="${html(client_id)}"><input type="hidden" name="redirect_uri" value="${html(redirect_uri)}"><input type="hidden" name="code_challenge" value="${html(code_challenge)}"><input type="hidden" name="scope" value="${html(scope)}"><input type="hidden" name="resource" value="${html(expected)}"><input type="hidden" name="state" value="${html(typeof state === 'string' ? state : '')}"><label for="secret">Senha de autorização</label><input id="secret" name="secret" type="password" autocomplete="current-password" required><button type="submit">Autorizar Claude App</button></form></body></html>`);
-              });
-              app.post('/oauth/approve', (req,res) => {
-                if (!rateLimit(req.ip || 'unknown')) return res.status(429).send('Too many authorization attempts');
-                const expectedSecret = process.env.OAUTH_APPROVE_SECRET; if (!expectedSecret) return res.status(503).send('OAuth approval is not configured');
-                const {client_id,redirect_uri,code_challenge,scope='mcp',resource,state,secret} = req.body || {};
-                if (typeof client_id !== 'string' || typeof redirect_uri !== 'string' || typeof code_challenge !== 'string' || typeof resource !== 'string' || typeof secret !== 'string') return res.status(400).send('Invalid approval request');
-                if (!equal(secret,expectedSecret)) return res.status(403).send('Authorization denied');
-                const client = clients.get(client_id); if (!client || !client.redirect_uris.includes(redirect_uri)) return res.status(400).send('Invalid client or redirect_uri');
-                const code = randomToken(32); codes.set(code,{client_id,redirect_uri,code_challenge,scope:String(scope),resource,expires_at:Date.now()+CODE_TTL,used:false});
-                const target = new URL(redirect_uri); target.searchParams.set('code',code); if (typeof state === 'string' && state) target.searchParams.set('state',state); return res.redirect(302,target.toString());
-              });
-              app.post('/oauth/token', (req,res) => {
-                const {grant_type,code,redirect_uri,client_id,code_verifier,resource:requestedResource} = req.body || {};
-                if (grant_type !== 'authorization_code') return res.status(400).json({error:'unsupported_grant_type'});
-                if ([code,redirect_uri,client_id,code_verifier].some(v => typeof v !== 'string')) return res.status(400).json({error:'invalid_request'});
-                const record = codes.get(code as string); if (!record || record.used || record.expires_at <= Date.now()) { codes.delete(code as string); return res.status(400).json({error:'invalid_grant'}); }
-                if (record.client_id !== client_id || record.redirect_uri !== redirect_uri || (typeof requestedResource === 'string' && requestedResource !== record.resource)) return res.status(400).json({error:'invalid_grant'});
-                if (!equal(pkce(code_verifier as string),record.code_challenge)) return res.status(400).json({error:'invalid_grant',error_description:'PKCE verification failed'});
-                record.used = true; codes.delete(code as string); const access_token = randomToken(32); tokens.set(access_token,{client_id:client_id as string,scope:record.scope,resource:record.resource,expires_at:Date.now()+TOKEN_TTL*1000}); return res.json({access_token,token_type:'Bearer',expires_in:TOKEN_TTL,scope:record.scope});
-              });
-            }
-
-            export function requireOAuthForMcp(opts?: { publicBaseUrl?: string }) {
-              return (req:Request,res:Response,next:NextFunction):void => {
-                if (process.env.VUA_OAUTH_REQUIRED !== 'true') { next(); return; }
-                const auth = req.get('authorization'); const match = auth?.match(/^Bearer\s+([^\s]+)$/i); const token = match?.[1]; const b = base(req,opts?.publicBaseUrl); const r = resource(b);
-                if (!token) { res.setHeader('WWW-Authenticate',`Bearer resource_metadata="${b}/.well-known/oauth-protected-resource", scope="mcp"`); res.status(401).json({error:'unauthorized',error_description:'Bearer access token required'}); return; }
-                const session = tokens.get(token); if (!session || session.expires_at <= Date.now()) { if(session) tokens.delete(token); res.setHeader('WWW-Authenticate',`Bearer error="invalid_token", resource_metadata="${b}/.well-known/oauth-protected-resource", scope="mcp"`); res.status(401).json({error:'invalid_token'}); return; }
-                if (session.resource !== r) { res.setHeader('WWW-Authenticate','Bearer error="invalid_token"'); res.status(401).json({error:'invalid_token',error_description:'Token resource mismatch'}); return; }
-                res.setHeader('MCP-Auth-Client-Id',session.client_id); res.setHeader('MCP-Auth-Scope',session.scope); next();
-              };
-            }
-
-      - name: Write OAuth module
-        run: |
-          printf '%s\n' "$OAUTH_TS" > src/vortex/oauth.ts
-
-      - name: Patch verifier proof-hash integrity
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('src/vortex/verifier.ts')
-          s=p.read_text()
-          old="""  // 4. Hashes Verification\n  const isInputHashValid = typeof proof.input_hash === 'string' && proof.input_hash.startsWith('sha256:');"""
-          new="""  // 4. Hashes Verification\n  // proof_hash MUST bind the complete unsigned ExecutionProof. Without this\n  // check a caller could alter fields not covered by the signature/hash contract.\n  const calculatedProofHash = sha256(unsignedProof);\n  if (typeof proof_hash !== 'string') {\n    reasons.push('Missing proof_hash');\n  } else if (proof_hash !== calculatedProofHash) {\n    reasons.push(`PROOF_HASH_MISMATCH: ${proof_hash} != ${calculatedProofHash}`);\n  }\n\n  const isInputHashValid = typeof proof.input_hash === 'string' && /^sha256:[0-9a-f]{64}$/.test(proof.input_hash);"""
-          if old not in s: raise SystemExit('verifier anchor missing')
-          s=s.replace(old,new)
-          s=s.replace("const isOutputHashValid = typeof proof.output_hash === 'string' && proof.output_hash.startsWith('sha256:');","const isOutputHashValid = typeof proof.output_hash === 'string' && /^sha256:[0-9a-f]{64}$/.test(proof.output_hash);")
-          p.write_text(s)
-          PY
-
-      - name: Patch gateway verification
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('src/vortex/gateway.ts')
-          s=p.read_text()
-          imp="import { verifyExecutionProof } from './verifier.js';\n"
-          if imp not in s:
-            anchor="import { evaluatePolicy } from './policy.js';\n"
-            if anchor not in s: raise SystemExit('gateway import anchor missing')
-            s=s.replace(anchor,anchor+imp)
-          old="""    case 'verify':\n      return {\n        verified: true,\n        verification_scope: input?.scope || 'full',\n        tamper_evident: true,\n        rfc8785_canonical: true,\n      };"""
-          new="""    case 'verify': {\n      const proof = input?.execution_proof as ExecutionProof | undefined;\n      if (!proof) {\n        return {\n          verified: false,\n          valid: false,\n          verification_scope: 'full',\n          tamper_evident: true,\n          rfc8785_canonical: false,\n          reasons: ['execution_proof is required'],\n        };\n      }\n      const verification = verifyExecutionProof(proof, {\n        expectedOutputHash: typeof input?.expected_hash === 'string' ? input.expected_hash : undefined,\n      });\n      return {\n        verified: verification.valid,\n        valid: verification.valid,\n        verification_scope: 'full',\n        tamper_evident: true,\n        rfc8785_canonical: verification.checks.canonicalization.passed,\n        reasons: verification.reasons,\n        checks: verification.checks,\n        verified_at: verification.verified_at,\n      };\n    }"""
-          if old not in s: raise SystemExit('gateway verify anchor missing')
-          s=s.replace(old,new)
-          p.write_text(s)
-          PY
-
-      - name: Patch MCP server auth-safe verification response
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('src/vortex/mcp-server.ts')
-          s=p.read_text()
-          if "import { verifyExecutionProof } from './verifier.js';" not in s:
-            s=s.replace("import { vuaRegistry } from './adapters/registry.js';\n","import { vuaRegistry } from './adapters/registry.js';\nimport { verifyExecutionProof } from './verifier.js';\n")
-          anchor="""    if (toolName === 'vortex.llm.invoke') {"""
-          block="""    if (toolName === 'vortex.verify') {\n      const proof = args.input?.execution_proof as any;\n      if (!proof || typeof proof !== 'object') {\n        return { jsonrpc: '2.0', id, result: { verified: false, valid: false, verification_scope: 'full', tamper_evident: true, rfc8785_canonical: false, reasons: ['execution_proof is required'] } };\n      }\n      const verification = verifyExecutionProof(proof, { expectedOutputHash: typeof args.input?.expected_hash === 'string' ? args.input.expected_hash : undefined });\n      return { jsonrpc: '2.0', id, result: { verified: verification.valid, valid: verification.valid, verification_scope: 'full', tamper_evident: true, rfc8785_canonical: verification.checks.canonicalization.passed, reasons: verification.reasons, checks: verification.checks, verified_at: verification.verified_at } };\n    }\n\n"""
-          if anchor not in s: raise SystemExit('mcp anchor missing')
-          s=s.replace(anchor,block+anchor,1)
-          p.write_text(s)
-          PY
-
-      - name: Patch Express MCP routes with OAuth
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('server.ts')
-          s=p.read_text()
-          if "from './src/vortex/oauth.js'" not in s:
-            s=s.replace("import { runAgentPatchArena } from './scripts/agent-patch-arena.js';\n","import { runAgentPatchArena } from './scripts/agent-patch-arena.js';\nimport { mountOAuth, requireOAuthForMcp } from './src/vortex/oauth.js';\n")
-          marker="  // 3. MCP JSON-RPC 2.0 & SSE Transports (Claude Mobile / Cursor / Anthropic Connectors)\n"
-          if marker not in s: raise SystemExit('server marker missing')
-          if 'mountOAuth(app' not in s:
-            s=s.replace(marker,marker+"  mountOAuth(app, { publicBaseUrl: process.env.PUBLIC_BASE_URL });\n\n")
-          s=s.replace("app.get(['/mcp', '/sse'], (req, res) => {","app.get(['/mcp', '/sse'], requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), (req, res) => {")
-          s=s.replace("app.get('/sse', (req, res) => {","app.get('/sse', requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), (req, res) => {")
-          s=s.replace("app.post(['/mcp/messages', '/messages'], async (req, res) => {","app.post(['/mcp/messages', '/messages'], requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), async (req, res) => {")
-          s=s.replace("app.post('/mcp', async (req, res) => {","app.post('/mcp', requireOAuthForMcp({ publicBaseUrl: process.env.PUBLIC_BASE_URL }), async (req, res) => {")
-          p.write_text(s)
-          PY
-
-      - name: Add regression test
-        run: |
-          cat > scripts/test-mcp-verify-tamper.ts <<'EOF'
-          import { executeVortexPipeline, resetAntiReplayCache } from '../src/vortex/gateway.js';
-          import { verifyExecutionProof } from '../src/vortex/verifier.js';
-          resetAntiReplayCache();
-          const req = { request_id: `mcp-proof-${Date.now()}`, operation: 'inspect' as const, input: {} };
-          const result = await executeVortexPipeline(req);
-          if (!result.execution_proof) throw new Error('inspect did not emit execution_proof');
-          const proof = result.execution_proof;
-          const original = verifyExecutionProof(proof);
-          if (!original.valid) throw new Error(`valid proof rejected: ${original.reasons.join('; ')}`);
-          const tampered = structuredClone(proof);
-          tampered.output_hash = 'sha256:' + '0'.repeat(64);
-          const bad = verifyExecutionProof(tampered);
-          if (bad.valid) throw new Error('CRITICAL: tampered execution proof was accepted');
-          console.log('PASS: original proof verified');
-          console.log('PASS: tampered proof rejected');
-          console.log(JSON.stringify({ original: original.valid, tampered: bad.valid, reasons: bad.reasons }, null, 2));
-          EOF
-
+      - name: Apply patch
+        run: python3 scripts/apply-p0-production-fix.py
       - name: Validate
         run: |
           npm ci
@@ -228,8 +26,7 @@ jobs:
           npm run build
           npx tsx scripts/test-mcp-verify-tamper.ts
           node --check dist/server.cjs
-
-      - name: Commit production patch
+      - name: Commit patch
         run: |
           git config user.name 'vua-ci'
           git config user.email 'vua-ci@users.noreply.github.com'
