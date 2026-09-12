@@ -40,6 +40,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: git cat-file -e "$HEAD_SHA^{commit}"
 
+      - name: Run trusted Patch Arena policy tests
+        working-directory: evaluator
+        run: python3 scripts/test-agent-patch-arena-policy.py
+
       - name: Run trusted Patch Arena
         working-directory: evaluator
         env:
