@@ -18,6 +18,7 @@ import { canonicalize } from './canonicalize.js';
 import { generateVortexIdentity, KEY_REGISTRY, sha256, signProofPayload } from './crypto.js';
 import { getOrCreateGOS3Session, validateGOS3Session } from './gos3.js';
 import { evaluatePolicy } from './policy.js';
+import { verifyExecutionProof } from './verifier.js';
 import { DEFAULT_SANDBOX_LIMITS, validateCredentialScope, validateFilesystemScope } from './sandbox.js';
 import type {
   ExecutionProof,
@@ -445,13 +446,12 @@ async function invokeGovernedConnector(
         requires_review: true,
       };
 
-    case 'verify':
-      return {
-        verified: true,
-        verification_scope: input?.scope || 'full',
-        tamper_evident: true,
-        rfc8785_canonical: true,
-      };
+    case 'verify': {
+      const proof = input?.execution_proof as ExecutionProof | undefined;
+      if (!proof) return { verified:false, valid:false, verification_scope:'full', tamper_evident:true, rfc8785_canonical:false, reasons:['execution_proof is required'] };
+      const verification = verifyExecutionProof(proof, { expectedOutputHash: typeof input?.expected_hash === 'string' ? input.expected_hash : undefined });
+      return { verified:verification.valid, valid:verification.valid, verification_scope:'full', tamper_evident:true, rfc8785_canonical:verification.checks.canonicalization.passed, reasons:verification.reasons, checks:verification.checks, verified_at:verification.verified_at };
+    }
 
     case 'branch.write':
       return {
