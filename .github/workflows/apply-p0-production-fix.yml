@@ -18,17 +18,30 @@ jobs:
           fetch-depth: 0
       - name: Apply patch
         run: python3 scripts/apply-p0-production-fix.py
-      - name: Validate
+      - name: Validate and capture diagnostics
         run: |
-          npm ci
-          npm run lint
-          npm run build
-          npx tsx scripts/test-mcp-verify-tamper.ts
-          node --check dist/server.cjs
-      - name: Commit patch
+          set +e
+          rm -f /tmp/p0-validation.log
+          echo '=== npm ci ===' >> /tmp/p0-validation.log
+          npm ci >> /tmp/p0-validation.log 2>&1
+          echo "EXIT=$?" >> /tmp/p0-validation.log
+          echo '=== npm run lint ===' >> /tmp/p0-validation.log
+          npm run lint >> /tmp/p0-validation.log 2>&1
+          echo "EXIT=$?" >> /tmp/p0-validation.log
+          echo '=== npm run build ===' >> /tmp/p0-validation.log
+          npm run build >> /tmp/p0-validation.log 2>&1
+          echo "EXIT=$?" >> /tmp/p0-validation.log
+          echo '=== mcp verify tamper ===' >> /tmp/p0-validation.log
+          npx tsx scripts/test-mcp-verify-tamper.ts >> /tmp/p0-validation.log 2>&1
+          echo "EXIT=$?" >> /tmp/p0-validation.log
+          echo '=== node syntax ===' >> /tmp/p0-validation.log
+          node --check dist/server.cjs >> /tmp/p0-validation.log 2>&1
+          echo "EXIT=$?" >> /tmp/p0-validation.log
+          cp /tmp/p0-validation.log docs/p0-validation.log
+      - name: Commit patch and diagnostics
         run: |
           git config user.name 'vua-ci'
           git config user.email 'vua-ci@users.noreply.github.com'
-          git add src/vortex/oauth.ts src/vortex/verifier.ts src/vortex/gateway.ts src/vortex/mcp-server.ts server.ts scripts/test-mcp-verify-tamper.ts
+          git add src/vortex/oauth.ts src/vortex/verifier.ts src/vortex/gateway.ts src/vortex/mcp-server.ts server.ts scripts/test-mcp-verify-tamper.ts docs/p0-validation.log
           git diff --cached --quiet || git commit -m 'ci(auth): apply P0 production patch'
           git push origin HEAD:fix/p0-mcp-verify-claude-oauth
