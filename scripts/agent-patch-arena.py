@@ -5,13 +5,10 @@ Every proposed patch is untrusted and is compared with the exact base revision
 under the same workload. The evaluator first applies absolute quality gates,
 then a policy appropriate to the type of change.
 
-* performance: requires a measured throughput improvement;
-* security/correctness: requires quality plus bounded, non-material regression;
-* governance: changes to this evaluator/policy require bounded no-regression and
-  normal protected-branch review; they never self-authorize a merge.
-
 Classification is derived from the trusted base evaluator, never from files
-modified by the candidate to weaken the gate.
+modified by the candidate to weaken the gate. Classification is fail-closed:
+a governance change is governance only when every changed file is an explicitly
+allowlisted governance file. Any cross-class change is ``mixed`` and rejected.
 """
 from __future__ import annotations
 
@@ -133,20 +130,39 @@ def _matches(path: str, patterns: tuple[str, ...]) -> bool:
 
 
 def classify_change(paths: list[str]) -> str:
-    """Classify from trusted repository paths; policy changes fail closed with mixed code."""
-    has_governance = any(_matches(path, GOVERNANCE_PATHS) for path in paths)
-    has_security = any(_matches(path, SECURITY_PATHS) for path in paths)
-    has_performance = any(_matches(path, PERFORMANCE_PATHS) for path in paths)
+    """Classify from trusted paths and fail closed on cross-class changes.
 
-    if has_governance:
-        if has_security or has_performance:
-            return "mixed"
-        return "governance"
-    if has_security and has_performance:
+    Governance is intentionally strict: a PR can receive the governance policy
+    only when every changed file is an allowlisted governance file. This prevents
+    an attacker from modifying the evaluator and piggybacking arbitrary product
+    code into a lower-bar governance verdict.
+    """
+    if not paths:
+        return "correctness"
+
+    governance_files = [path for path in paths if _matches(path, GOVERNANCE_PATHS)]
+    security_files = [path for path in paths if _matches(path, SECURITY_PATHS)]
+    performance_files = [path for path in paths if _matches(path, PERFORMANCE_PATHS)]
+    unknown_files = [
+        path
+        for path in paths
+        if path not in governance_files and path not in security_files and path not in performance_files
+    ]
+
+    if governance_files:
+        if len(governance_files) == len(paths):
+            return "governance"
         return "mixed"
-    if has_performance:
+
+    if security_files and performance_files:
+        return "mixed"
+    if performance_files and unknown_files:
+        return "mixed"
+    if security_files and unknown_files:
+        return "mixed"
+    if performance_files:
         return "performance"
-    if has_security:
+    if security_files:
         return "security"
     return "correctness"
 
@@ -220,19 +236,15 @@ def main() -> int:
                 )
 
                 if change_class == "performance":
-                    passed = performance_ok
-                    verdict = "PASS_SUPERIOR" if passed else "REJECT"
-                    reason = "candidate meets performance improvement and stability policy" if passed else "candidate does not demonstrate sufficient measured gain"
+                    verdict = "PASS_SUPERIOR" if performance_ok else "REJECT"
+                    reason = "candidate meets performance improvement and stability policy" if performance_ok else "candidate does not demonstrate sufficient measured gain"
                 elif change_class in {"security", "correctness"}:
-                    passed = no_regression_ok
-                    verdict = "PASS_NO_REGRESSION" if passed else "REJECT"
-                    reason = "candidate meets quality and bounded no-regression policy" if passed else "candidate exceeds bounded regression policy"
+                    verdict = "PASS_NO_REGRESSION" if no_regression_ok else "REJECT"
+                    reason = "candidate meets quality and bounded no-regression policy" if no_regression_ok else "candidate exceeds bounded regression policy"
                 elif change_class == "governance":
-                    passed = no_regression_ok
-                    verdict = "PASS_GOVERNANCE" if passed else "REJECT"
-                    reason = "governance change passes quality and bounded no-regression policy; protected-branch review remains mandatory" if passed else "governance change exceeds bounded regression policy"
+                    verdict = "PASS_GOVERNANCE" if no_regression_ok else "REJECT"
+                    reason = "governance change passes quality and bounded no-regression policy; protected-branch review remains mandatory" if no_regression_ok else "governance change exceeds bounded regression policy"
                 else:
-                    passed = False
                     verdict = "REJECT"
                     reason = "mixed governance/security/performance change requires explicit review"
 
