@@ -18,6 +18,7 @@ Bem-vindo à documentação técnica do **VUA (Vortex Universal Connector)** —
 | [**08. Conectar ao Claude App**](./08-conectar-ao-claude-app.md) | Guia passo a passo para o Claude (Mobile/Desktop) | Configuração do conector personalizado, preenchimento de campos e uso das ferramentas |
 | [**09. Sprint de Prompt Engineering e Código Verificável**](./09-sprint-prompt-engineering-codigo-verificavel.md) | Plano de dez dias para transformar requisitos em mudanças reproduzíveis | Escopo, backlog, matriz de rastreabilidade, gates e definição de pronto |
 | [**10. Contrato de Prompts Verificáveis**](./10-contrato-de-prompts-verificaveis.md) | Formato padrão para tarefas de engenharia executáveis e auditáveis | Contexto, ameaças, invariantes, aceite, verificação e evidência |
+| [**11. Auditoria GOS3 2 Comparada**](./11-auditoria-gos3-2-comparada.md) | Resultado comparativo dos cabeçalhos GOS3 e instruções do auditor reproduzível | Auditoria 1, Auditoria 2, checksums, snapshots locais e execução Python |
 
 ---
 

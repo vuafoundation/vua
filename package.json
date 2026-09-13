@@ -17,6 +17,7 @@
     "test": "tsx scripts/run-full-suite.ts",
     "test:threads": "tsx scripts/test-threads.ts",
     "verify:gos3": "tsx scripts/verify-gos3-headers.ts --strict",
+    "audit:gos3": "python3 scripts/audit-gos3-headers.py --repo . --baseline-ref origin/main --json-out reports/gos3-audit-2.json",
     "vua": "tsx bin/vua.js",
     "bench": "tsx bin/vua.js bench",
     "bench:semantic": "tsx scripts/run-semantic-benchmark.ts"
