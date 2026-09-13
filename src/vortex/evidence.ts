@@ -16,6 +16,7 @@
 import { canonicalize } from './canonicalize.js';
 import { sha256 } from './crypto.js';
 import type { ExecutionEvidence } from './types.js';
+import type { EnvironmentFingerprint } from './baseline.js';
 
 export interface BenchmarkMetrics {
   rps: number;
@@ -41,6 +42,9 @@ export interface BenchmarkReport {
   score_baseline: number;
   score_current: number;
   verdict: 'PASS_SUPERIOR' | 'PASS_ACCEPTABLE' | 'FAIL_REGRESSION' | 'BLOCKED_BY_GATES';
+  environment_fingerprint?: EnvironmentFingerprint;
+  baseline_tolerance?: number;
+  baseline_source?: 'environment-file' | 'normative-default';
 }
 
 export const BASELINE_METRICS: BenchmarkMetrics = {
@@ -64,9 +68,9 @@ export function generateExecutionEvidence(params: {
   allTestsPassed: boolean;
   coveragePercent?: number;
 }): ExecutionEvidence {
-  const commit_sha = params.commitSha || '856920785b8392b036211cc851e1f6467961ff52';
-  const ci_run_id = params.ciRunId || '34228487367';
-  const ci_attempt = params.ciRunAttempt || '1';
+  const commit_sha = params.commitSha || 'UNSET_COMMIT';
+  const ci_run_id = params.ciRunId || 'UNSET_CI_RUN';
+  const ci_attempt = params.ciRunAttempt || 'UNSET_ATTEMPT';
 
   const rawEvidence: Omit<ExecutionEvidence, 'canonical_hash'> = {
     schema: 'vortex-execution-evidence/v1',
@@ -86,12 +90,12 @@ export function generateExecutionEvidence(params: {
     result: {
       build: 'PASS',
       tests: params.allTestsPassed ? 'PASS' : 'FAIL',
-      coverage: `${params.coveragePercent || 100}%`,
+      coverage: `${params.coveragePercent ?? 0}%`,
       integration: params.allTestsPassed ? 'PASS' : 'FAIL',
       security: params.allTestsPassed ? 'PASS' : 'FAIL',
-      stress: 'PASS',
-      performance: 'PASS',
-      degradation: 'PASS',
+      stress: params.allTestsPassed ? 'PASS' : 'FAIL',
+      performance: params.allTestsPassed ? 'PASS' : 'FAIL',
+      degradation: params.allTestsPassed ? 'PASS' : 'FAIL',
     },
     execution_proofs: params.proofHashes,
   };
@@ -125,7 +129,13 @@ export function calculateBenchmarkScore(m: BenchmarkMetrics): number {
  */
 export function evaluateBenchmarkGate(
   current: BenchmarkMetrics,
-  gatesPassed: { coverage: boolean; security: boolean; integration: boolean; proof: boolean }
+  gatesPassed: { coverage: boolean; security: boolean; integration: boolean; proof: boolean },
+  options: {
+    baseline?: BenchmarkMetrics;
+    tolerance?: number;
+    fingerprint?: EnvironmentFingerprint;
+    source?: 'environment-file' | 'normative-default';
+  } = {},
 ): BenchmarkReport {
   const allAbsoluteGates =
     gatesPassed.coverage &&
@@ -133,7 +143,9 @@ export function evaluateBenchmarkGate(
     gatesPassed.integration &&
     gatesPassed.proof;
 
-  const scoreBaseline = calculateBenchmarkScore(BASELINE_METRICS);
+  const baseline = options.baseline ?? BASELINE_METRICS;
+  const tolerance = options.tolerance ?? 1;
+  const scoreBaseline = calculateBenchmarkScore(baseline);
   const scoreCurrent = calculateBenchmarkScore(current);
 
   let verdict: BenchmarkReport['verdict'] = 'BLOCKED_BY_GATES';
@@ -141,7 +153,7 @@ export function evaluateBenchmarkGate(
     verdict = 'BLOCKED_BY_GATES';
   } else if (scoreCurrent > scoreBaseline) {
     verdict = 'PASS_SUPERIOR';
-  } else if (scoreCurrent >= scoreBaseline * 0.95) {
+  } else if (scoreCurrent >= scoreBaseline / tolerance) {
     verdict = 'PASS_ACCEPTABLE';
   } else {
     verdict = 'FAIL_REGRESSION';
@@ -149,7 +161,7 @@ export function evaluateBenchmarkGate(
 
   return {
     timestamp: new Date().toISOString(),
-    baseline: BASELINE_METRICS,
+    baseline,
     current,
     gates: {
       coverage_100_percent: gatesPassed.coverage,
@@ -161,5 +173,8 @@ export function evaluateBenchmarkGate(
     score_baseline: scoreBaseline,
     score_current: scoreCurrent,
     verdict,
+    ...(options.fingerprint ? { environment_fingerprint: options.fingerprint } : {}),
+    baseline_tolerance: tolerance,
+    baseline_source: options.source ?? 'normative-default',
   };
 }
