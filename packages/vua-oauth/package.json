@@ -1,0 +1,16 @@
+{
+  "name": "vua-oauth",
+  "version": "0.1.0",
+  "description": "OAuth 2.1 Authorization Server (RFC 8414/9728/7591/7636) for the VUA MCP endpoint — transport auth only, independent from GOS3 approval_token.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test:conformance": "node --test dist/test/*.test.js",
+    "test": "npm run build && npm run test:conformance"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^22.5.0"
+  }
+}

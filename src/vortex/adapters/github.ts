@@ -18,12 +18,12 @@ export class VUAGitHubAdapter implements IVUAAdapter {
       {
         action: 'inspect_repo',
         description: 'Inspect repository metadata, default branch, branch protections, and security policies.',
-        defaultParams: { owner: 'vortex-foundation', repo: 'vua-connector' },
+        defaultParams: {},
       },
       {
         action: 'verify_commit',
         description: 'Cryptographically verify Git commit signature (PGP / SSH / Ed25519) and compute SHA-256 tree hash.',
-        defaultParams: { commit_sha: '856920785b8392b036211cc851e1f6467961ff52' },
+        defaultParams: {},
       },
       {
         action: 'propose_pr',
@@ -63,7 +63,7 @@ export class VUAGitHubAdapter implements IVUAAdapter {
     ],
     systemMetrics: {
       api_rate_limit: '5000/hr',
-      auth_type: process.env.GITHUB_TOKEN ? 'PAT / GitHub App Token' : 'Unauthenticated / Governed Sandbox Emulation',
+      auth_type: process.env.GITHUB_TOKEN ? 'PAT / GitHub App Token' : 'not_configured',
       verified_identities: 'Ed25519 + Sigstore',
     },
   };
@@ -73,8 +73,8 @@ export class VUAGitHubAdapter implements IVUAAdapter {
     return {
       status: 'ready',
       metrics: {
-        api_rate_limit: hasToken ? '5000/hr' : '60/hr (Public Sandbox)',
-        auth_mode: hasToken ? 'Token Authenticated' : 'Governed Sandbox Sandbox Mode',
+        api_rate_limit: hasToken ? '5000/hr' : 'unknown_without_token',
+        auth_mode: hasToken ? 'Token Authenticated' : 'Not configured',
         vcs_protocol: 'HTTPS / SSH / Git v2',
       },
     };
@@ -87,6 +87,9 @@ export class VUAGitHubAdapter implements IVUAAdapter {
   ): Promise<{ data: Record<string, unknown>; auditLog: string[] }> {
     const auditLog: string[] = [];
     auditLog.push(`[GITHUB-VUA] Initiating governed VCS action: ${action}`);
+    if (['write_branch_commit', 'create_pr_written', 'merge_pr'].includes(action) && !process.env.GITHUB_TOKEN && !payload.token) {
+      throw new Error('GITHUB_TOKEN_REQUIRED_FOR_MUTATION');
+    }
 
     if (action === 'inspect_repo') {
       const owner = (target.owner || payload.owner || 'vortex-foundation') as string;
@@ -119,7 +122,8 @@ export class VUAGitHubAdapter implements IVUAAdapter {
     }
 
     if (action === 'verify_commit') {
-      const sha = (target.commit_sha || payload.commit_sha || '856920785b8392b036211cc851e1f6467961ff52') as string;
+      const sha = (target.commit_sha || payload.commit_sha) as string | undefined;
+      if (!sha) throw new Error('commit_sha_required');
       auditLog.push(`[GITHUB-VUA] Fetching commit object ${sha}`);
       auditLog.push(`[GITHUB-VUA] Verifying cryptographic commit signature with author key`);
 

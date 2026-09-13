@@ -64,9 +64,9 @@ export function generateExecutionEvidence(params: {
   allTestsPassed: boolean;
   coveragePercent?: number;
 }): ExecutionEvidence {
-  const commit_sha = params.commitSha || '856920785b8392b036211cc851e1f6467961ff52';
-  const ci_run_id = params.ciRunId || '34228487367';
-  const ci_attempt = params.ciRunAttempt || '1';
+  const commit_sha = params.commitSha || 'UNSET_COMMIT';
+  const ci_run_id = params.ciRunId || 'UNSET_CI_RUN';
+  const ci_attempt = params.ciRunAttempt || 'UNSET_ATTEMPT';
 
   const rawEvidence: Omit<ExecutionEvidence, 'canonical_hash'> = {
     schema: 'vortex-execution-evidence/v1',
@@ -86,12 +86,12 @@ export function generateExecutionEvidence(params: {
     result: {
       build: 'PASS',
       tests: params.allTestsPassed ? 'PASS' : 'FAIL',
-      coverage: `${params.coveragePercent || 100}%`,
+      coverage: `${params.coveragePercent ?? 0}%`,
       integration: params.allTestsPassed ? 'PASS' : 'FAIL',
       security: params.allTestsPassed ? 'PASS' : 'FAIL',
-      stress: 'PASS',
-      performance: 'PASS',
-      degradation: 'PASS',
+      stress: params.allTestsPassed ? 'PASS' : 'FAIL',
+      performance: params.allTestsPassed ? 'PASS' : 'FAIL',
+      degradation: params.allTestsPassed ? 'PASS' : 'FAIL',
     },
     execution_proofs: params.proofHashes,
   };

@@ -51,6 +51,22 @@ export interface LLMInvocationResult {
 let cachedGeminiClient: GoogleGenAI | null = null;
 let cachedGeminiKey: string | null = null;
 
+function safeBaseUrl(provider: LLMProviderType, candidate: string | undefined, fallback: string): string {
+  const value = (candidate || fallback).replace(/\/$/, '');
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { throw new Error('LLM baseUrl must be a valid URL'); }
+  if (parsed.username || parsed.password) throw new Error('LLM baseUrl must not contain credentials');
+  const host = parsed.hostname.toLowerCase();
+  const local = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (provider === 'ollama' || provider === 'lmstudio' || provider === 'llamacpp') {
+    if (!local || parsed.protocol !== 'http:') throw new Error('local LLM baseUrl must target localhost over HTTP');
+    return value;
+  }
+  const allowed = (process.env.VUA_ALLOWED_LLM_HOSTS || 'api.openai.com').split(',').map((v) => v.trim().toLowerCase()).filter(Boolean);
+  if (parsed.protocol !== 'https:' || !allowed.includes(host)) throw new Error('LLM baseUrl is not in the configured HTTPS allowlist');
+  return value;
+}
+
 function getGeminiClient(customApiKey?: string): GoogleGenAI {
   const key = customApiKey || process.env.GEMINI_API_KEY;
   if (!key) {
@@ -79,7 +95,7 @@ async function callGemini(
   prompt: string,
   config: LLMConfig
 ): Promise<{ text: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }> {
-  const client = getGeminiClient(config.apiKey);
+  const client = getGeminiClient();
   let modelName = config.model || 'gemini-3.8-flash';
 
   const geminiConfig: Record<string, unknown> = {};
@@ -136,7 +152,7 @@ async function callOllama(
   prompt: string,
   config: LLMConfig
 ): Promise<{ text: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }> {
-  const baseUrl = (config.baseUrl || process.env.LOCAL_LLM_URL || 'http://localhost:11434').replace(/\/$/, '');
+  const baseUrl = safeBaseUrl('ollama', config.baseUrl || process.env.LOCAL_LLM_URL, 'http://localhost:11434');
   const modelName = config.model || 'llama3';
 
   const timeoutMs = config.timeoutMs || 180000;
@@ -204,8 +220,8 @@ async function callOpenAICompatible(
     defaultBase = 'http://localhost:1234/v1';
   }
 
-  const baseUrl = (config.baseUrl || defaultBase).replace(/\/$/, '');
-  const apiKey = config.apiKey || process.env.OPENAI_API_KEY || (config.provider === 'lmstudio' ? 'not-needed' : '');
+  const baseUrl = safeBaseUrl(config.provider, config.baseUrl, defaultBase);
+  const apiKey = process.env.OPENAI_API_KEY || (config.provider === 'lmstudio' ? 'not-needed' : '');
   const modelName = config.model || (config.provider === 'lmstudio' ? 'local-model' : 'gpt-4o-mini');
 
   const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
@@ -277,7 +293,7 @@ export async function probeLocalLLM(provider: 'ollama' | 'lmstudio', baseUrl?: s
   latency_ms: number;
   error?: string;
 }> {
-  const targetUrl = (baseUrl || (provider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234/v1')).replace(/\/$/, '');
+  const targetUrl = safeBaseUrl(provider, baseUrl, provider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234/v1');
   const start = Date.now();
 
   try {

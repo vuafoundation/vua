@@ -168,14 +168,14 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
   }, []);
 
   // Handle Connect
-  const handleConnect = async (useDemo = false) => {
+  const handleConnect = async () => {
     setLoadingAuth(true);
     setAuthError(null);
     try {
       const res = await fetch('/api/github/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: useDemo ? undefined : tokenInput, demo: useDemo }),
+        body: JSON.stringify({ token: tokenInput }),
       });
       const data = await res.json();
       if (!res.ok || !data.authenticated) {
@@ -259,7 +259,7 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
             owner: activeTarget.owner,
             repo: activeTarget.repo,
             branch: selectedBranch,
-            commit_sha: activeTarget.commit_sha || '856920785b8392b036211cc851e1f6467961ff52',
+            ...(activeTarget.commit_sha ? { commit_sha: activeTarget.commit_sha } : {}),
           },
           payload: {
             owner: activeTarget.owner,
@@ -371,7 +371,7 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
               {githubUser ? (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-950 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  {githubUser.mode === 'sandbox_demo' ? 'Sandbox Demo' : 'Conectado'}
+                  Conectado
                 </span>
               ) : (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-zinc-800 border border-zinc-700 text-zinc-400">
@@ -509,7 +509,7 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
               <>
                 <button
                   id="btn-connect-github-token"
-                  onClick={() => handleConnect(false)}
+                  onClick={handleConnect}
                   disabled={loadingAuth || !tokenInput.trim()}
                   className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white text-xs font-semibold transition flex items-center justify-center gap-2"
                 >
@@ -517,15 +517,6 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
                   Autenticar com Token Seguro
                 </button>
 
-                <button
-                  id="btn-connect-demo-sandbox"
-                  onClick={() => handleConnect(true)}
-                  disabled={loadingAuth}
-                  className="w-full py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-medium transition flex items-center justify-center gap-2"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  Usar Repositórios Demo da Fundação (Sem Token)
-                </button>
               </>
             )}
           </div>
@@ -589,7 +580,7 @@ export const GitHubRepoManager: React.FC<GitHubRepoManagerProps> = ({
                 <div className="flex items-center gap-1.5">
                   <GitCommit className="w-3.5 h-3.5 text-zinc-500" />
                   <span className="font-mono text-[11px] text-zinc-300">
-                    SHA: {(activeTarget.commit_sha || '856920785b8392b036211cc851e1f6467961ff52').substring(0, 10)}...
+                    SHA: {activeTarget.commit_sha ? `${activeTarget.commit_sha.substring(0, 10)}...` : 'não informado'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
