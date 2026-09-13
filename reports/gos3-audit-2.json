@@ -1,0 +1,115 @@
+{
+  "schema": "vua.gos3-audit.v1",
+  "audit_1": "git:origin/main",
+  "audit_2": "/home/ubuntu/vua",
+  "audit_1_files": {
+    "scripts/verify-gos3-provenance.mjs": {
+      "file": "scripts/verify-gos3-provenance.mjs",
+      "status": "VALID",
+      "has_header": true,
+      "version": "1.0.0",
+      "resource": "scripts/verify-gos3-provenance.mjs",
+      "declared_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+      "actual_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+      "valid_checksum": true,
+      "capability": "system.inspect"
+    },
+    "src/governed/governed-vault.ts": {
+      "file": "src/governed/governed-vault.ts",
+      "status": "VALID",
+      "has_header": true,
+      "version": "1.0.0",
+      "resource": "/src/governed/governed-vault.ts",
+      "declared_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+      "actual_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+      "valid_checksum": true,
+      "capability": "repository.write"
+    }
+  },
+  "audit_2_files": {
+    "scripts/verify-gos3-provenance.mjs": {
+      "file": "scripts/verify-gos3-provenance.mjs",
+      "status": "VALID",
+      "has_header": true,
+      "version": "1.0.0",
+      "resource": "scripts/verify-gos3-provenance.mjs",
+      "declared_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+      "actual_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+      "valid_checksum": true,
+      "capability": "system.inspect"
+    },
+    "src/governed/governed-vault.ts": {
+      "file": "src/governed/governed-vault.ts",
+      "status": "VALID",
+      "has_header": true,
+      "version": "1.0.0",
+      "resource": "/src/governed/governed-vault.ts",
+      "declared_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+      "actual_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+      "valid_checksum": true,
+      "capability": "repository.write"
+    }
+  },
+  "comparison": [
+    {
+      "file": "scripts/verify-gos3-provenance.mjs",
+      "change": "UNCHANGED",
+      "audit1": {
+        "file": "scripts/verify-gos3-provenance.mjs",
+        "status": "VALID",
+        "has_header": true,
+        "version": "1.0.0",
+        "resource": "scripts/verify-gos3-provenance.mjs",
+        "declared_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+        "actual_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+        "valid_checksum": true,
+        "capability": "system.inspect"
+      },
+      "audit2": {
+        "file": "scripts/verify-gos3-provenance.mjs",
+        "status": "VALID",
+        "has_header": true,
+        "version": "1.0.0",
+        "resource": "scripts/verify-gos3-provenance.mjs",
+        "declared_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+        "actual_checksum": "sha256:a18025ca7ea67041672ee94a9d9c828344ab6eb3d94beb65a11dffd1ab1570da",
+        "valid_checksum": true,
+        "capability": "system.inspect"
+      }
+    },
+    {
+      "file": "src/governed/governed-vault.ts",
+      "change": "UNCHANGED",
+      "audit1": {
+        "file": "src/governed/governed-vault.ts",
+        "status": "VALID",
+        "has_header": true,
+        "version": "1.0.0",
+        "resource": "/src/governed/governed-vault.ts",
+        "declared_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+        "actual_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+        "valid_checksum": true,
+        "capability": "repository.write"
+      },
+      "audit2": {
+        "file": "src/governed/governed-vault.ts",
+        "status": "VALID",
+        "has_header": true,
+        "version": "1.0.0",
+        "resource": "/src/governed/governed-vault.ts",
+        "declared_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+        "actual_checksum": "sha256:24809582b25160572ce1d140cd09fb5a0bafad2005258ba41414e02737de48b5",
+        "valid_checksum": true,
+        "capability": "repository.write"
+      }
+    }
+  ],
+  "summary": {
+    "audit_1_total": 2,
+    "audit_2_total": 2,
+    "audit_2_valid": 2,
+    "audit_2_failed": 0,
+    "audit_2_passed": true,
+    "changed_files": 0
+  }
+}

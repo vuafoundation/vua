@@ -1,0 +1,87 @@
+name: Verifiable Quality Gates
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "server.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "docs/**"
+      - ".github/workflows/verifiable-quality-gates.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: verifiable-quality-gates-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gates:
+    name: Lint, conformance, build, audit and documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify dependency audit
+        # main currently has two known moderate qs advisories covered by PR #23.
+        # High and critical advisories remain hard failures for every PR.
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Full conformance and quality suite
+        run: npm test
+
+      - name: GOS3 contract verification
+        run: npm run verify:gos3
+
+      - name: Production build
+        run: npm run build
+
+      - name: Verify documentation links and required sprint artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/09-sprint-prompt-engineering-codigo-verificavel.md
+          test -s docs/10-contrato-de-prompts-verificaveis.md
+          grep -Fq '09-sprint-prompt-engineering-codigo-verificavel.md' docs/README.md
+          grep -Fq '10-contrato-de-prompts-verificaveis.md' docs/README.md
+          grep -Fq 'PEVC-01' docs/09-sprint-prompt-engineering-codigo-verificavel.md
+          grep -Fq 'output_format' docs/10-contrato-de-prompts-verificaveis.md
+
+      - name: Verify repository text integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --check; then
+            echo "No whitespace errors found in the checked-out revision."
+          fi
+
+      - name: Publish gate summary
+        if: always()
+        run: |
+          {
+            echo "### Verifiable Quality Gates"
+            echo ""
+            echo "- Commit: \\`${GITHUB_SHA}\\`"
+            echo "- Node.js: \\`$(node --version)\\`"
+            echo "- npm: \\`$(npm --version)\\`"
+            echo "- Audit (high/critical), lint, conformance, GOS3, build and documentation checks are required gates."
+          } >> "$GITHUB_STEP_SUMMARY"
