@@ -1,5 +1,14 @@
 #!/usr/bin/env tsx
 /**
+ * @gos3-contract
+ * @version 1.0.0
+ * @resource scripts/agent-patch-arena.ts
+ * @checksum sha256:1cf86439fb8a2abe42b262e8eba4e5c5acb7b4dba28d81f0cd5aad118ebfe947
+ * @capability repository.write
+ * @onboarded_at 2026-09-13T00:00:00.000Z
+ * @governed true
+ */
+/**
  * ==============================================================================
  * VORTEX FOUNDATION: AGENT PATCH ARENA & LEADERBOARD EVALUATOR
  * ==============================================================================
@@ -13,7 +22,9 @@
 
 import { runCanaryTests } from './test-canary.js';
 import { runCapabilityBenchmarkSuite } from '../src/vortex/semantic-oracle.js';
-import { generateExecutionEvidence, BASELINE_METRICS } from '../src/vortex/evidence.js';
+import { generateExecutionEvidence } from '../src/vortex/evidence.js';
+import { loadBaseline } from '../src/vortex/baseline.js';
+import { resolveCommitSha, resolveCiRunId, resolveCiRunAttempt } from '../src/vortex/ci-env.js';
 
 export interface AgentPatchCandidate {
   agent_id: string;
@@ -128,6 +139,12 @@ export async function runAgentPatchArena(
   console.log('       🏆 VORTEX AGENT PATCH ARENA: DARWINIAN CI BENCHMARK        ');
   console.log('       Conforming to VUA-SPEC-v2: Universal Subjection & Baseline Gain ');
   console.log('═════════════════════════════════════════════════════════════════════');
+
+  const baselineRecord = loadBaseline();
+  if (!baselineRecord) {
+    throw new Error('BASELINE_MISSING: rode VUA_ESTABLISH_BASELINE=1 npm test antes da arena');
+  }
+  const BASELINE_METRICS = baselineRecord.metrics;
 
   const patchPool: AgentPatchCandidate[] = candidates || [
     {
@@ -334,6 +351,9 @@ export async function runAgentPatchArena(
 
   // Generate Ed25519 verifiable evidence
   const evidence = generateExecutionEvidence({
+    commitSha: resolveCommitSha(),
+    ciRunId: resolveCiRunId(),
+    ciRunAttempt: resolveCiRunAttempt(),
     proofHashes: results.map((r) => `sha256:${Buffer.from(r.candidate.agent_id + r.composite_score + r.verdict).toString('hex')}`),
     allTestsPassed: winner !== null,
     coveragePercent: 100,

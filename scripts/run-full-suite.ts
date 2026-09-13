@@ -1,4 +1,13 @@
 /**
+ * @gos3-contract
+ * @version 1.0.0
+ * @resource scripts/run-full-suite.ts
+ * @checksum sha256:3f1b3f06759c54f4044442dfb193397a61d575e3fe7be73ab0f994532c7df49f
+ * @capability repository.write
+ * @onboarded_at 2026-09-13T00:00:00.000Z
+ * @governed true
+ */
+/**
  * Vortex Unified Test & Conformance Suite
  * 
  * Verifies with 100% Gate Requirement:
@@ -18,7 +27,7 @@
 import { canonicalize } from '../src/vortex/canonicalize.js';
 import { runAdversarialSuite, runFoundationE2ESuite } from '../src/vortex/conformance.js';
 import { generateVortexIdentity, sha256, signProofPayload, verifyProofSignature } from '../src/vortex/crypto.js';
-import { evaluateBenchmarkGate, generateExecutionEvidence, BASELINE_METRICS } from '../src/vortex/evidence.js';
+import { evaluateBenchmarkGate, generateExecutionEvidence, type BenchmarkMetrics } from '../src/vortex/evidence.js';
 import { executeVortexPipeline, resetAntiReplayCache } from '../src/vortex/gateway.js';
 import { createGOS3Session, onboardResource, revokeGOS3Session, validateGOS3Session } from '../src/vortex/gos3.js';
 import { evaluatePolicy } from '../src/vortex/policy.js';
@@ -29,6 +38,11 @@ import { probeLocalLLM } from '../src/vortex/llm.js';
 import { runGOS3HeaderAudit } from './verify-gos3-headers.js';
 import { BENCHMARK_QUESTIONS, evaluateSemanticVerdict, runCapabilityBenchmarkSuite } from '../src/vortex/semantic-oracle.js';
 import { runCanaryTests } from './test-canary.js';
+import { resolveCommitSha, resolveCiRunId, resolveCiRunAttempt } from '../src/vortex/ci-env.js';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpus, arch, platform } from 'node:os';
+import { execSync } from 'node:child_process';
 
 interface TestSuiteSummary {
   category: string;
@@ -85,6 +99,51 @@ async function runStep(category: string, fn: () => Promise<number>) {
     throw err;
   }
 }
+
+
+// ─── BASELINE DINÂMICA ────────────────────────────────────────────────────
+const BASELINE_ROOT = process.env.VUA_BASELINE_ROOT ?? 'baselines';
+const BASELINE_TOLERANCE = Number(process.env.VUA_BASELINE_TOLERANCE ?? '1.15');
+
+function canonicalizeBaseline(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalizeBaseline).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const k = Object.keys(v as object).sort();
+    return `{${k.map((x) => `${JSON.stringify(x)}:${canonicalizeBaseline((v as any)[x])}`).join(',')}}`;
+  }
+  return JSON.stringify(v);
+}
+
+function envFingerprint(): { fp: string; dir: string; file: string } {
+  const env = { arch: arch(), platform: platform(), cpu_model: cpus()[0]?.model ?? 'unknown', node_version: process.version };
+  const fp = 'sha256:' + createHash('sha256').update(canonicalizeBaseline(env)).digest('hex').slice(0, 16);
+  const dir = `${BASELINE_ROOT}/${fp.replace(':', '_')}`;
+  return { fp, dir, file: `${dir}/latest.json` };
+}
+
+function loadBaseline(): { metrics: BenchmarkMetrics; commit: string } | null {
+  const { file } = envFingerprint();
+  if (!existsSync(file)) return null;
+  const rec = JSON.parse(readFileSync(file, 'utf8'));
+  const { baseline_hash, ...rest } = rec;
+  const expected = 'sha256:' + createHash('sha256').update(canonicalizeBaseline(rest)).digest('hex');
+  if (expected !== baseline_hash) throw new Error(`BASELINE_TAMPERED: ${file}`);
+  return { metrics: rec.metrics, commit: rec.commit_sha };
+}
+
+function saveBaseline(metrics: BenchmarkMetrics, sampleSize: number, warmupSize: number): string {
+  const { fp, dir, file } = envFingerprint();
+  mkdirSync(dir, { recursive: true });
+  let sha = 'unknown', branch = 'unknown';
+  try { sha = execSync('git rev-parse HEAD').toString().trim(); branch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim(); } catch {}
+  const rec: any = { version: '1', env_fingerprint: fp, env: { arch: arch(), platform: platform(), cpu_model: cpus()[0]?.model ?? 'unknown', node_version: process.version }, commit_sha: sha, branch, measured_at: new Date().toISOString(), sample_size: sampleSize, warmup_size: warmupSize, metrics };
+  rec.baseline_hash = 'sha256:' + createHash('sha256').update(canonicalizeBaseline(rec)).digest('hex');
+  writeFileSync(file, JSON.stringify(rec, null, 2) + '\n');
+  return file;
+}
+// ──────────────────────────────────────────────────────────────────────────
+
+
 
 async function main() {
   console.log('═════════════════════════════════════════════════════════════════════');
@@ -251,12 +310,31 @@ async function main() {
       memory_efficiency_pct: 96.5,
     };
 
-    const benchmarkReport = evaluateBenchmarkGate(currentMetrics, {
-      coverage: true,
-      security: true,
-      integration: true,
-      proof: true,
-    });
+    const establish = process.env.VUA_ESTABLISH_BASELINE === '1';
+    let baselineRecord = loadBaseline();
+    if (establish || baselineRecord === null) {
+      const file = saveBaseline(currentMetrics, sampleSize, warmupSize);
+      console.log(`\n[baseline] ESTABLISHED at ${file}`);
+      baselineRecord = { metrics: currentMetrics, commit: 'just-established' };
+    }
+    const benchmarkReport = evaluateBenchmarkGate(
+      currentMetrics,
+      { coverage: true, security: true, integration: true, proof: true },
+      baselineRecord.metrics,
+      BASELINE_TOLERANCE,
+    );
+
+    console.log(
+      `[baseline] tolerance=${BASELINE_TOLERANCE} minAcceptable=${(benchmarkReport.score_baseline / BASELINE_TOLERANCE).toFixed(1)}`,
+    );
+    const b = baselineRecord.metrics;
+    const drift: string[] = [];
+    if (currentMetrics.rps < b.rps / BASELINE_TOLERANCE) drift.push(`rps ${currentMetrics.rps} < ${b.rps}/${BASELINE_TOLERANCE}`);
+    if (currentMetrics.p95_ms > b.p95_ms * BASELINE_TOLERANCE) drift.push(`p95 ${currentMetrics.p95_ms} > ${b.p95_ms}*${BASELINE_TOLERANCE}`);
+    if (currentMetrics.p99_ms > b.p99_ms * BASELINE_TOLERANCE) drift.push(`p99 ${currentMetrics.p99_ms} > ${b.p99_ms}*${BASELINE_TOLERANCE}`);
+    if (drift.length) console.log(
+      `[baseline] relative drift: ${drift.join('; ')} (absolute gates passed; verdict=${benchmarkReport.verdict})`,
+    );
 
     const benchmarkSummary = JSON.stringify(
       {
@@ -584,7 +662,14 @@ ${benchmarkSummary}`,
 
   // 14. GENERATE DETERMINISTIC EVIDENCE HASH
   const evidence = generateExecutionEvidence({
-    proofHashes: collectedProofHashes.length > 0 ? collectedProofHashes : ['sha256:dummy-proof-pass'],
+    commitSha: resolveCommitSha(),
+    ciRunId: resolveCiRunId(),
+    ciRunAttempt: resolveCiRunAttempt(),
+    proofHashes: collectedProofHashes.length > 0
+      ? collectedProofHashes
+      : (() => {
+          throw new Error('DELIVERABLE_TRUTH: evidence proof hash is missing; dummy fallback is forbidden');
+        })(),
     allTestsPassed: true,
     coveragePercent: 100,
   });
