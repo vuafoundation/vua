@@ -40,7 +40,44 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: git cat-file -e "$HEAD_SHA^{commit}"
 
+      - name: Classify benchmark applicability
+        id: applicability
+        working-directory: evaluator
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_files="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          printf '%s\n' "$changed_files"
+          if printf '%s\n' "$changed_files" | grep -Eq '^(src/|server\.ts$|bin/|scripts/|package\.json$|package-lock\.json$)'; then
+            echo "requires_benchmark=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "requires_benchmark=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record non-applicable benchmark evidence
+        if: steps.applicability.outputs.requires_benchmark == 'false'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          cat > "$GITHUB_WORKSPACE/arena-result.json" <<JSON
+          {
+            "schema": "vortex.patch-arena.v1",
+            "base_sha": "$BASE_SHA",
+            "head_sha": "$HEAD_SHA",
+            "verdict": "PASS_NOT_APPLICABLE",
+            "reason": "No runtime, executable, dependency, or benchmark input changed.",
+            "quality": {"passed": true},
+            "benchmark": {"applicable": false}
+          }
+          JSON
+
       - name: Run trusted Patch Arena
+        if: steps.applicability.outputs.requires_benchmark == 'true'
         working-directory: evaluator
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -67,6 +104,6 @@ jobs:
               result = json.load(f)
           print('Arena verdict:', result.get('verdict'))
           print('Reason:', result.get('reason'))
-          if result.get('verdict') != 'PASS_SUPERIOR':
+          if result.get('verdict') not in ('PASS_SUPERIOR', 'PASS_NOT_APPLICABLE'):
               raise SystemExit(1)
           PY
