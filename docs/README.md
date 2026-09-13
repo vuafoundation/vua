@@ -16,6 +16,7 @@ Bem-vindo à documentação técnica do **VUA (Vortex Universal Connector)** —
 | [**06. Agent Patch Arena CI Gate**](./06-agent-patch-arena-ci.md) | Arena Darwiniana e governança de patches | Pipeline de benchmark estatístico, critérios PASS_SUPERIOR (CV <= 10%, Delta >= +5%), isolamento pull_request_target |
 | [**07. Conectores e Adaptadores Disponíveis**](./07-conectores-e-adaptadores.md) | Catálogo técnico de Conectores e Adaptadores | Conectores de infraestrutura (filesystem, runtime, MCP, LLM) e adaptadores de SO (github, linux, android, windows, canary) |
 | [**08. Conectar ao Claude App**](./08-conectar-ao-claude-app.md) | Guia passo a passo para o Claude (Mobile/Desktop) | Configuração do conector personalizado, preenchimento de campos e uso das ferramentas |
+| [**09. Auditoria e Baseline por Ambiente**](./09-auditoria-e-baseline-por-ambiente.md) | Leitura correta dos gates, fingerprint e tolerância | `VORTEX_BASELINE_FILE`, `BASELINE_TOLERANCE`, evidência e gaps de produção |
 
 ---
 

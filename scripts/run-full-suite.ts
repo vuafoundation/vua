@@ -29,6 +29,7 @@ import { probeLocalLLM } from '../src/vortex/llm.js';
 import { runGOS3HeaderAudit } from './verify-gos3-headers.js';
 import { BENCHMARK_QUESTIONS, evaluateSemanticVerdict, runCapabilityBenchmarkSuite } from '../src/vortex/semantic-oracle.js';
 import { runCanaryTests } from './test-canary.js';
+import { getBaselineTolerance, getEnvironmentFingerprint, selectBaseline } from '../src/vortex/baseline.js';
 
 interface TestSuiteSummary {
   category: string;
@@ -113,6 +114,14 @@ async function main() {
     // SHA-256 standard
     const hash = sha256('vortex');
     assert(hash.startsWith('sha256:'), 'Hash must have sha256: prefix');
+
+    const fingerprint = getEnvironmentFingerprint();
+    assert(/^sha256:[0-9a-f]{64}$/.test(fingerprint.sha256), 'Environment fingerprint must be sha256');
+    assert(getBaselineTolerance('1.5') === 1.5, 'Baseline tolerance must accept configured values');
+    let invalidToleranceRejected = false;
+    try { getBaselineTolerance('0.9'); } catch { invalidToleranceRejected = true; }
+    assert(invalidToleranceRejected, 'Baseline tolerance below 1 must be rejected');
+    assert(selectBaseline(BASELINE_METRICS).source === 'normative-default', 'Missing baseline file must use normative default');
 
     return 4;
   });
@@ -251,11 +260,18 @@ async function main() {
       memory_efficiency_pct: 96.5,
     };
 
+    const baseline = selectBaseline(BASELINE_METRICS);
+    console.log(`[baseline] fingerprint=${baseline.fingerprint.sha256} tolerance=${baseline.tolerance} source=${baseline.source}`);
     const benchmarkReport = evaluateBenchmarkGate(currentMetrics, {
       coverage: true,
       security: true,
       integration: true,
       proof: true,
+    }, {
+      baseline: baseline.metrics,
+      tolerance: baseline.tolerance,
+      fingerprint: baseline.fingerprint,
+      source: baseline.source,
     });
 
     const benchmarkSummary = JSON.stringify(
@@ -270,6 +286,9 @@ async function main() {
         score_baseline: benchmarkReport.score_baseline,
         verdict: benchmarkReport.verdict,
         passed_absolute_gates: benchmarkReport.passed_absolute_gates,
+        environment_fingerprint: benchmarkReport.environment_fingerprint,
+        baseline_tolerance: benchmarkReport.baseline_tolerance,
+        baseline_source: benchmarkReport.baseline_source,
       },
       null,
       2,

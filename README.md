@@ -43,8 +43,14 @@ O VUA disponibiliza uma interface amigável e com segurança reforçada para con
 
 ### 1. Autenticação Amigável e Segura (Zero-Leakage)
 - **Token em Memória Volátil**: O Personal Access Token (PAT) é mantido estritamente na memória da sessão (`sessionGitHubToken`) e **nunca é persistido em arquivos de log, localStorage ou disco**.
-- **Modo Sandbox Demo**: Permite testar o fluxo com 5 projetos simulados de alta fidelidade sem necessidade de fornecer token real.
+- **Sem autenticação demo**: o fluxo GitHub exige token real; dados simulados não são apresentados como repositórios conectados.
 - **Alternância de Visibilidade**: Campo de token protegido com botão para exibir/ocultar credenciais.
+
+### Baseline de performance e evidência
+
+O gate de performance seleciona o baseline pela impressão digital do ambiente (`sha256` de arquitetura, CPU e versão do Node). Quando existe um arquivo apontado por `VORTEX_BASELINE_FILE`, o baseline correspondente ao fingerprint é usado; caso contrário, o sistema usa o baseline normativo e declara essa origem no relatório. `BASELINE_TOLERANCE` é configurável, com valor padrão `1.0` e mínimo `1.0`.
+
+Um gate verde comprova os testes e métricas observados naquela execução; não comprova sozinho segurança de produção, efeito externo de adaptadores ou execução real de todos os ambientes.
 
 ### 2. Seleção de Projetos e Repositórios
 - Exploração visual de repositórios públicos, privados e governados.

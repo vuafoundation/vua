@@ -9,6 +9,8 @@ A implementação atende os invariantes principais do Vortex/VUA: execução gov
 
 O audit gate reproduzível terminou com **Failures: 0 / FULL AUDIT: PASS**.
 
+O benchmark registra `environment_fingerprint.sha256`, `baseline_source` e `baseline_tolerance`. Nesta execução, a origem foi `normative-default` e a tolerância foi `1.0`; um baseline específico pode ser fornecido por `VORTEX_BASELINE_FILE`.
+
 ## Correções aplicadas
 
 | Área | Correção |
@@ -34,6 +36,7 @@ Core gateway tests               PASS
 OAuth build + conformance       PASS (34/34)
 OAuth npm audit                  PASS
 Full audit script                PASS (0 failures)
+GOS3 strict header verifier      PASS (2/2 monitored files)
 ```
 
 O build da VUA ainda emite um warning conhecido do esbuild sobre `import.meta` em `scripts/test-canary.ts` quando o bundle do servidor usa CommonJS. Isso não quebra o build nem os testes, mas deve ser removido em uma limpeza posterior, preferencialmente separando scripts de teste do bundle de produção.
