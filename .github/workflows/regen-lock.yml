@@ -1,15 +1,20 @@
 name: Regen Lockfile
-on: workflow_dispatch
+on:
+  push:
+    branches: [fix/regenerate-lockfile]
 jobs:
   regen:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with: { ref: fix/regenerate-lockfile }
+        with:
+          ref: fix/regenerate-lockfile
       - uses: actions/setup-node@v4
-        with: { node-version: '22' }
+        with:
+          node-version: '22'
       - run: npm install --package-lock-only
       - run: |
           git config user.name "github-actions[bot]"
