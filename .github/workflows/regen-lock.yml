@@ -15,10 +15,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --package-lock-only
-      - run: |
+      - name: Regen from scratch
+        run: |
+          rm -f package-lock.json
+          npm install --package-lock-only
+      - name: Commit if changed
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "actions@github.com"
           git add package-lock.json
-          git diff --staged --quiet || git commit -m "fix(lockfile): regenerate with all platform optionals"
+          git status --short
+          git diff --staged --stat
+          git commit -m "fix(lockfile): regenerate from scratch on x86_64" || echo "nothing to commit"
           git push
