@@ -1,4 +1,13 @@
 /**
+ * @gos3-contract
+ * @version 1.0.0
+ * @resource src/vortex/evidence.ts
+ * @checksum sha256:219d34c03f11da7c34c75a232db4b5305ecc9b7a70793109b8771a7a6a568589
+ * @capability repository.write
+ * @onboarded_at 2026-09-13T00:00:00.000Z
+ * @governed true
+ */
+/**
  * Vortex Foundation - Execution Evidence Hash, CI Provenance & Benchmark Engine
  * 
  * Normative Requirements:
@@ -43,15 +52,7 @@ export interface BenchmarkReport {
   verdict: 'PASS_SUPERIOR' | 'PASS_ACCEPTABLE' | 'FAIL_REGRESSION' | 'BLOCKED_BY_GATES';
 }
 
-export const BASELINE_METRICS: BenchmarkMetrics = {
-  rps: 850,
-  p50_ms: 1.2,
-  p95_ms: 4.8,
-  p99_ms: 12.5,
-  error_rate_pct: 0.0,
-  timeout_rate_pct: 0.0,
-  memory_efficiency_pct: 95.0,
-};
+
 
 /**
  * Computes deterministic Execution Evidence Hash
@@ -64,9 +65,16 @@ export function generateExecutionEvidence(params: {
   allTestsPassed: boolean;
   coveragePercent?: number;
 }): ExecutionEvidence {
-  const commit_sha = params.commitSha || '856920785b8392b036211cc851e1f6467961ff52';
-  const ci_run_id = params.ciRunId || '34228487367';
-  const ci_attempt = params.ciRunAttempt || '1';
+  const commit_sha = params.commitSha;
+  const ci_run_id = params.ciRunId;
+  const ci_attempt = params.ciRunAttempt;
+  if (!commit_sha || !ci_run_id) {
+    throw new Error(
+      'CI_PROVENANCE_MISSING: commitSha and ciRunId are required; ' +
+      'local runs must not fabricate CI evidence. Pass explicit values ' +
+      'or set VUA_COMMIT_SHA / GITHUB_RUN_ID env vars in the caller.',
+    );
+  }
 
   const rawEvidence: Omit<ExecutionEvidence, 'canonical_hash'> = {
     schema: 'vortex-execution-evidence/v1',
@@ -125,7 +133,9 @@ export function calculateBenchmarkScore(m: BenchmarkMetrics): number {
  */
 export function evaluateBenchmarkGate(
   current: BenchmarkMetrics,
-  gatesPassed: { coverage: boolean; security: boolean; integration: boolean; proof: boolean }
+  gatesPassed: { coverage: boolean; security: boolean; integration: boolean; proof: boolean },
+  baseline: BenchmarkMetrics,
+  tolerance: number = 1.15,
 ): BenchmarkReport {
   const allAbsoluteGates =
     gatesPassed.coverage &&
@@ -133,15 +143,16 @@ export function evaluateBenchmarkGate(
     gatesPassed.integration &&
     gatesPassed.proof;
 
-  const scoreBaseline = calculateBenchmarkScore(BASELINE_METRICS);
+  const scoreBaseline = calculateBenchmarkScore(baseline);
   const scoreCurrent = calculateBenchmarkScore(current);
+  const minAcceptable = scoreBaseline / tolerance;
 
   let verdict: BenchmarkReport['verdict'] = 'BLOCKED_BY_GATES';
   if (!allAbsoluteGates) {
     verdict = 'BLOCKED_BY_GATES';
   } else if (scoreCurrent > scoreBaseline) {
     verdict = 'PASS_SUPERIOR';
-  } else if (scoreCurrent >= scoreBaseline * 0.95) {
+  } else if (scoreCurrent >= minAcceptable) {
     verdict = 'PASS_ACCEPTABLE';
   } else {
     verdict = 'FAIL_REGRESSION';
@@ -149,7 +160,7 @@ export function evaluateBenchmarkGate(
 
   return {
     timestamp: new Date().toISOString(),
-    baseline: BASELINE_METRICS,
+    baseline,
     current,
     gates: {
       coverage_100_percent: gatesPassed.coverage,

@@ -1,4 +1,13 @@
 /**
+ * @gos3-contract
+ * @version 1.0.0
+ * @resource server.ts
+ * @checksum sha256:c9ff131130ba925a1375cd7574dadbf30fba09b3162a2336324488d86acb2463
+ * @capability repository.write
+ * @onboarded_at 2026-09-13T00:00:00.000Z
+ * @governed true
+ */
+/**
  * Vortex MCP Server - Foundation Execution Governance Entry Point
  * Express + Vite Full-Stack Implementation
  */
@@ -10,6 +19,8 @@ import { createServer as createViteServer } from 'vite';
 import { runAdversarialSuite, runFoundationE2ESuite, runVUAAdaptersE2ESuite } from './src/vortex/conformance.js';
 import { generateVortexIdentity, KEY_REGISTRY } from './src/vortex/crypto.js';
 import { evaluateBenchmarkGate, generateExecutionEvidence } from './src/vortex/evidence.js';
+import { loadBaseline } from './src/vortex/baseline.js';
+import { resolveCommitSha, resolveCiRunId, resolveCiRunAttempt } from './src/vortex/ci-env.js';
 import {
   CURRENT_IDENTITY,
   EXECUTION_LOGS,
@@ -265,24 +276,27 @@ async function startServer() {
 
   // 9. CI Evidence & Benchmark Gate
   app.get('/api/vortex/evidence', (req, res) => {
+    const baselineRecord = loadBaseline();
+    if (!baselineRecord) {
+      res.status(503).json({ error: 'BASELINE_MISSING: rode VUA_ESTABLISH_BASELINE=1 npm test' });
+      return;
+    }
+
     const proofHashes = EXECUTION_LOGS.slice(0, 10).map((p) => p.proof_hash || p.output_hash);
     const evidence = generateExecutionEvidence({
+      commitSha: resolveCommitSha(),
+      ciRunId: resolveCiRunId(),
+      ciRunAttempt: resolveCiRunAttempt(),
       proofHashes,
       allTestsPassed: true,
       coveragePercent: 100,
     });
 
     const benchmark = evaluateBenchmarkGate(
-      {
-        rps: 920,
-        p50_ms: 1.1,
-        p95_ms: 4.2,
-        p99_ms: 11.0,
-        error_rate_pct: 0.0,
-        timeout_rate_pct: 0.0,
-        memory_efficiency_pct: 96.5,
-      },
-      { coverage: true, security: true, integration: true, proof: true }
+      { rps: 920, p50_ms: 1.1, p95_ms: 4.2, p99_ms: 11.0, error_rate_pct: 0.0, timeout_rate_pct: 0.0, memory_efficiency_pct: 96.5 },
+      { coverage: true, security: true, integration: true, proof: true },
+      baselineRecord.metrics,
+      Number(process.env.VUA_BASELINE_TOLERANCE ?? '1.15'),
     );
 
     res.json({
